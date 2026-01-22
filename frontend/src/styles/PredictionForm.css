@@ -1,0 +1,342 @@
+/**
+ * Prediction Form Styles
+ * Refined using the professional Olive/Neutral design system
+ */
+
+.prediction-form-container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Form Styles */
+.prediction-form {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.form-section {
+  padding: 2.5rem;
+}
+
+.section-heading {
+  color: var(--neutral-900);
+  font-size: 1.25rem;
+  /* xl */
+  font-weight: 700;
+  margin-bottom: 2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--olive-100);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  letter-spacing: -0.025em;
+}
+
+/* Form Layout */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  color: var(--neutral-700);
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  /* sm */
+}
+
+/* Input Fields */
+.form-group input,
+.form-group select {
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border: 1px solid var(--neutral-300);
+  background-color: #FFFFFF;
+  border-radius: 8px;
+  color: var(--neutral-900);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--primary-500);
+}
+
+.form-group input::placeholder {
+  color: var(--neutral-400);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background-color: var(--neutral-100);
+  color: var(--neutral-400);
+  cursor: not-allowed;
+}
+
+/* Checkbox Grid */
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-item label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-weight: 400;
+  color: var(--neutral-800);
+  font-size: 0.9375rem;
+  user-select: none;
+}
+
+.checkbox-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary-600);
+  border: 1.5px solid var(--neutral-300);
+  border-radius: 4px;
+}
+
+/* Form Actions */
+.form-actions {
+  padding: 2.5rem;
+  display: flex;
+  gap: 1.25rem;
+  justify-content: center;
+  background-color: var(--olive-50);
+  border-top: 1px solid var(--olive-100);
+}
+
+/* Result Container */
+.result-container {
+  margin-top: 2.5rem;
+  padding: 2.5rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  animation: fadeInDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--olive-100);
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-container h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+/* Success State Colors */
+.result-container.success {
+  background-color: #FFFFFF;
+}
+
+.result-container.success h3 {
+  color: var(--primary-700);
+}
+
+/* Results Formatting */
+.result-details {
+  margin-top: 2rem;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0.75rem;
+  background-color: var(--olive-50);
+  border-radius: 10px;
+  border: 1px solid var(--olive-100);
+}
+
+.result-item.main-result {
+  background: linear-gradient(135deg, var(--primary-600), var(--primary-800));
+  color: #FFFFFF;
+  border: none;
+  padding: 1.5rem 2rem;
+}
+
+.result-label {
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.result-value {
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.main-result .result-value {
+  font-size: 1.5rem;
+}
+
+/* Probability Bars */
+.probabilities {
+  margin-top: 2.5rem;
+}
+
+.probabilities h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--neutral-700);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.probability-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.prob-label {
+  width: 140px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--neutral-600);
+}
+
+.prob-bar-container {
+  flex: 1;
+  height: 10px;
+  background-color: var(--neutral-100);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.prob-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-400), var(--primary-600));
+  border-radius: 5px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.prob-value {
+  width: 45px;
+  text-align: right;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary-700);
+}
+
+/* Result States */
+.result-container.loading {
+  background-color: #FFFFFF;
+  text-align: center;
+}
+
+.result-container.error {
+  background-color: var(--sage-50);
+  border-color: var(--sage-200);
+}
+
+.result-container.error h3 {
+  color: var(--sage-700);
+}
+
+/* Prediction specific result colors */
+.result-container.hyperthyroid .main-result {
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-800));
+}
+
+.result-container.hypothyroid .main-result {
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
+}
+
+.result-container.negative .main-result {
+  background: linear-gradient(135deg, var(--olive-600), var(--olive-800));
+}
+
+/* Disclaimer */
+.result-disclaimer {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  background-color: var(--accent-50);
+  border: 1px solid var(--accent-200);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--accent-800);
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.result-disclaimer i {
+  color: var(--accent-600);
+  font-size: 1.125rem;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .form-section {
+    padding: 1.5rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    padding: 1.5rem;
+  }
+
+  .result-container {
+    padding: 1.5rem;
+  }
+
+  .result-item {
+    padding: 1rem;
+  }
+
+  .probability-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .prob-label {
+    width: 100%;
+  }
+
+  .prob-value {
+    text-align: left;
+    width: 100%;
+  }
+}
