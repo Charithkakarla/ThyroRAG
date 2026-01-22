@@ -1,5 +1,4 @@
-import React from 'react';
-import { Bot, User } from 'lucide-react';
+import { Brain, User } from 'lucide-react';
 import '../styles/Chatbot.css';
 
 /**
@@ -26,7 +25,7 @@ function MessageBubble({ message, sender, timestamp }) {
         )}
       </div>
       <div className="message-avatar">
-        {sender === 'ai' ? <Bot size={20} /> : <User size={20} />}
+        {sender === 'ai' ? <Brain size={20} /> : <User size={20} />}
       </div>
     </div>
   );

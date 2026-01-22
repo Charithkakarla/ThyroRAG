@@ -1,14 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Trash2,
-  Upload,
-  Send,
-  Loader2,
-  Lightbulb,
-  AlertCircle
-} from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import { sendChatMessage } from '../services/api';
+import { Trash2, Upload, Send, Loader2 } from 'lucide-react';
 import '../styles/Chatbot.css';
 
 /**
@@ -167,7 +160,7 @@ function Chatbot() {
         {/* Error Display */}
         {error && (
           <div className="chat-error">
-            <p><AlertCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} /> {error}</p>
+            <p>⚠️ {error}</p>
           </div>
         )}
 
@@ -178,7 +171,7 @@ function Chatbot() {
       {/* Suggested Questions (show only if chat is empty or just started) */}
       {messages.length <= 1 && !isLoading && (
         <div className="suggested-questions">
-          <p className="suggestions-label"><Lightbulb size={16} /> Suggested questions:</p>
+          <p className="suggestions-label">💡 Suggested questions:</p>
           <div className="suggestions-grid">
             {suggestedQuestions.map((question, index) => (
               <button

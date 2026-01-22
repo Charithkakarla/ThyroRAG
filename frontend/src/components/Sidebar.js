@@ -1,48 +1,49 @@
 import React from 'react';
 import {
-  ShieldPlus,
-  Bell,
-  LogIn,
-  TestTube,
-  Bot,
+  Activity,
+  Brain,
   History,
   Info,
+  HeartPulse,
   ChevronRight,
   ChevronLeft,
   Settings,
-  HelpCircle
+  HelpCircle,
+  Stethoscope,
+  Bell,
+  LogIn
 } from 'lucide-react';
 import '../styles/Sidebar.css';
 
 /**
  * Collapsible Sidebar Component
- * Features navigation with Lucide icons and smooth collapse/expand animation
+ * Features navigation with Boxicons and smooth collapse/expand animation
  */
 function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
   const menuItems = [
     {
       id: 'prediction',
-      icon: TestTube,
-      label: 'Disease Prediction',
-      description: 'Analyze thyroid health'
+      icon: Stethoscope,
+      label: 'Diagnosis',
+      description: 'AI Screening'
     },
     {
       id: 'chatbot',
-      icon: Bot,
-      label: 'Medical Assistant',
-      description: 'Ask questions'
+      icon: Brain,
+      label: 'Medical AI',
+      description: 'Expert Assistant'
     },
     {
       id: 'history',
       icon: History,
-      label: 'History',
-      description: 'View past results'
+      label: 'Patient History',
+      description: 'Past Records'
     },
     {
       id: 'about',
       icon: Info,
-      label: 'About',
-      description: 'Learn more'
+      label: 'Documentation',
+      description: 'System Info'
     }
   ];
 
@@ -50,23 +51,24 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
     <>
       {/* Fixed Header */}
       <header className="app-header-fixed">
-        <div className="header-left">
+        <div className="header-container-flex">
           <div className="header-content-fixed">
-            <img src="/2.png" alt="ThyroRAG Logo" className="header-icon-img" />
+            <HeartPulse className="header-icon" size={36} />
             <div className="header-text">
               <h1 className="header-title">ThyroRAG</h1>
-              <p className="header-subtitle">Advanced Medical Analytics</p>
+              <p className="header-subtitle">AI-Powered Thyroid Assistant</p>
             </div>
           </div>
-        </div>
 
-        <div className="header-right">
-          <Bell className="icon-btn" size={20} style={{ cursor: 'pointer', color: 'var(--olive-300)' }} />
-          <div className="header-user">
-            {!isCollapsed && <span className="menu-label">Login</span>}
-            <div className="user-avatar">
-              <LogIn size={20} />
-            </div>
+          <div className="header-actions-static">
+            <button className="header-action-btn" title="Notifications">
+              <Bell size={20} />
+              <span className="notif-badge"></span>
+            </button>
+            <button className="header-login-btn">
+              <LogIn size={18} />
+              <span>Login</span>
+            </button>
           </div>
         </div>
       </header>
@@ -87,39 +89,38 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
         {/* Navigation Menu */}
         <nav className="sidebar-nav">
           <ul className="menu-list">
-            {menuItems.map((item) => (
-              <li key={item.id} className="menu-item">
-                <button
-                  className={`menu-link ${activeTab === item.id ? 'active' : ''}`}
-                  onClick={() => setActiveTab(item.id)}
-                  title={isCollapsed ? item.label : ''}
-                >
-                  <item.icon className="menu-icon" size={20} />
-                  {!isCollapsed && (
-                    <div className="menu-text">
-                      <span className="menu-label">{item.label}</span>
-                      <span className="menu-description">{item.description}</span>
-                    </div>
-                  )}
-                </button>
-              </li>
-            ))}
+            {menuItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <li key={item.id} className="menu-item">
+                  <button
+                    className={`menu-link ${activeTab === item.id ? 'active' : ''}`}
+                    onClick={() => setActiveTab(item.id)}
+                    title={isCollapsed ? item.label : ''}
+                  >
+                    <IconComponent className="menu-icon" size={24} />
+                    {!isCollapsed && (
+                      <div className="menu-text">
+                        <span className="menu-label">{item.label}</span>
+                        <span className="menu-description">{item.description}</span>
+                      </div>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </nav>
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          <div className="system-status">
-            <div className="status-indicator"></div>
-            <span>System Live</span>
+          <div className="footer-item">
+            <Settings className="menu-icon" size={20} />
+            {!isCollapsed && <span className="footer-text">Settings</span>}
           </div>
           <div className="footer-item">
-            <Settings size={20} />
-            {!isCollapsed && <span className="footer-text">User Settings</span>}
-          </div>
-          <div className="footer-item">
-            <HelpCircle size={20} />
-            {!isCollapsed && <span className="footer-text">Help & Support</span>}
+            <HelpCircle className="menu-icon" size={20} />
+            {!isCollapsed && <span className="footer-text">Help</span>}
           </div>
         </div>
       </div>

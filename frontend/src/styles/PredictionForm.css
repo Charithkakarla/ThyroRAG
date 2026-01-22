@@ -9,10 +9,15 @@
   margin: 0 auto;
 }
 
+/* Local Component Variables Mapping to Global Design System - using provided spec */
+/* (Currently using global variables from App.css) */
+
 /* Form Styles */
 .prediction-form {
-  background-color: #FFFFFF;
-  border-radius: 12px;
+  background-color: var(--background);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--olive-100);
   overflow: hidden;
 }
 
