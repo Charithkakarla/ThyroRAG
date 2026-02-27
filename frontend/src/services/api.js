@@ -19,13 +19,22 @@ export const predictThyroidDisease = async (patientData) => {
 };
 
 /**
- * Chatbot functionality - Currently disabled as per prototype requirements
+ * Send a chat message to the RAG-powered chatbot
+ * @param {string} message - User's message
+ * @param {Array} history - Chat history (optional)
+ * @returns {Promise} - AI response
  */
 export const sendChatMessage = async (message, history = []) => {
-  return {
-    message: "Chatbot will be developed soon.",
-    response: "Chatbot will be developed soon."
-  };
+  try {
+    const response = await axios.post(`${API_BASE_URL}/chat`, {
+      message: message,
+      history: history
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Chat API Error:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to connect to RAG chatbot backend');
+  }
 };
 
 const apiService = { predictThyroidDisease, sendChatMessage };

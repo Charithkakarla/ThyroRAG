@@ -1,24 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PredictionForm from './components/PredictionForm';
 import Chatbot from './components/Chatbot';
+import PatientHistory from './components/PatientHistory';
+import Settings from './components/Settings';
+import Login from './components/Login';
 import Sidebar from './components/Sidebar';
-import { Activity, Brain, History, Info, FlaskConical } from 'lucide-react';
 import './styles/App.css';
 
 /**
  * Main App Component
- * Contains two main sections:
+ * Contains authentication and main sections:
  * 1. Thyroid Disease Prediction Form
  * 2. RAG-powered Medical Chatbot
+ * 3. Patient History
+ * 4. Settings
  */
 function App() {
-  // State to track which tab is active (prediction or chatbot)
   const [activeTab, setActiveTab] = useState('prediction');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check for stored user session on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('thyrorag_user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+    setIsLoading(false);
+  }, []);
+
+  const handleLogin = (userData) => {
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('thyrorag_user');
+    setUser(null);
+    setActiveTab('prediction');
+  };
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
+
+  // Show loading state
+  if (isLoading) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+
+  // Show login if not authenticated
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -26,7 +60,7 @@ function App() {
         return (
           <div className="section-container">
             <h2 className="section-title">
-              <Activity className="section-icon" size={32} /> Thyroid Disease Diagnosis
+              <i className='bx bx-test-tube'></i> Thyroid Disease Prediction
             </h2>
             <p className="section-description">
               Enter your medical data below to get an AI-powered prediction about your thyroid health.
@@ -38,7 +72,7 @@ function App() {
         return (
           <div className="section-container">
             <h2 className="section-title">
-              <Brain className="section-icon" size={32} /> AI Medical Assistant
+              <i className='bx bx-brain'></i> AI Medical Assistant
             </h2>
             <p className="section-description">
               Ask questions about symptoms, diagnosis, and thyroid health.
@@ -50,23 +84,19 @@ function App() {
         return (
           <div className="section-container">
             <h2 className="section-title">
-              <History className="section-icon" size={32} /> Patient History
+              <i className='bx bx-history'></i> Patient Records
             </h2>
             <p className="section-description">
-              View your past predictions and chatbot conversations.
+              View patient medical history and past thyroid screening results.
             </p>
-            <div className="coming-soon">
-              <i className='bx bx-time-five'></i>
-              <h3>Coming Soon</h3>
-              <p>History tracking feature is under development.</p>
-            </div>
+            <PatientHistory />
           </div>
         );
       case 'about':
         return (
           <div className="section-container">
             <h2 className="section-title">
-              <Info className="section-icon" size={32} /> System Documentation
+              <i className='bx bx-info-circle'></i> About ThyroRAG
             </h2>
             <div className="about-content">
               <div className="about-section">
@@ -84,6 +114,18 @@ function App() {
             </div>
           </div>
         );
+      case 'settings':
+        return (
+          <div className="section-container">
+            <h2 className="section-title">
+              <i className='bx bx-cog'></i> Settings
+            </h2>
+            <p className="section-description">
+              Manage your preferences and system configuration.
+            </p>
+            <Settings />
+          </div>
+        );
       default:
         return null;
     }
@@ -97,6 +139,8 @@ function App() {
         toggleSidebar={toggleSidebar}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        user={user}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}

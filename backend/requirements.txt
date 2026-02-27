@@ -6,3 +6,11 @@ pandas
 numpy
 catboost
 scikit-learn
+langchain
+langchain-community
+langchain-google-genai
+chromadb
+sentence-transformers
+python-dotenv
+google-generativeai
+requests

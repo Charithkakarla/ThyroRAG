@@ -11,15 +11,17 @@ import {
   HelpCircle,
   Stethoscope,
   Bell,
-  LogIn
+  LogOut,
+  User
 } from 'lucide-react';
 import '../styles/Sidebar.css';
+import 'boxicons/css/boxicons.min.css';
 
 /**
  * Collapsible Sidebar Component
- * Features navigation with Boxicons and smooth collapse/expand animation
+ * Features navigation with Lucide icons and smooth collapse/expand animation
  */
-function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
+function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab, user, onLogout }) {
   const menuItems = [
     {
       id: 'prediction',
@@ -38,6 +40,12 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
       icon: History,
       label: 'Patient History',
       description: 'Past Records'
+    },
+    {
+      id: 'settings',
+      icon: Settings,
+      label: 'Settings',
+      description: 'Preferences'
     },
     {
       id: 'about',
@@ -65,10 +73,12 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
               <Bell size={20} />
               <span className="notif-badge"></span>
             </button>
-            <button className="header-login-btn">
-              <LogIn size={18} />
-              <span>Login</span>
-            </button>
+            {user && (
+              <div className="user-info-header">
+                <User size={18} />
+                <span className="user-name">{user.fullName}</span>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -82,7 +92,7 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
             onClick={toggleSidebar}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {isCollapsed ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
           </button>
         </div>
 
@@ -90,7 +100,7 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
         <nav className="sidebar-nav">
           <ul className="menu-list">
             {menuItems.map((item) => {
-              const IconComponent = item.icon;
+              const Icon = item.icon;
               return (
                 <li key={item.id} className="menu-item">
                   <button
@@ -98,7 +108,7 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
                     onClick={() => setActiveTab(item.id)}
                     title={isCollapsed ? item.label : ''}
                   >
-                    <IconComponent className="menu-icon" size={24} />
+                    <Icon className="menu-icon" size={24} />
                     {!isCollapsed && (
                       <div className="menu-text">
                         <span className="menu-label">{item.label}</span>
@@ -114,14 +124,14 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab }) {
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          <div className="footer-item">
-            <Settings className="menu-icon" size={20} />
-            {!isCollapsed && <span className="footer-text">Settings</span>}
-          </div>
-          <div className="footer-item">
-            <HelpCircle className="menu-icon" size={20} />
-            {!isCollapsed && <span className="footer-text">Help</span>}
-          </div>
+          <button
+            className="footer-item footer-btn"
+            onClick={onLogout}
+            title={isCollapsed ? 'Logout' : ''}
+          >
+            <LogOut className="menu-icon" size={20} />
+            {!isCollapsed && <span className="footer-text">Logout</span>}
+          </button>
         </div>
       </div>
     </>

@@ -22,6 +22,7 @@ function PredictionForm() {
     fullName: '',
     dob: '',
     age: '',
+    weight: '',
     sex: 'F',
     TSH: '',
     T3: '',
@@ -112,6 +113,7 @@ function PredictionForm() {
       fullName: '',
       dob: '',
       age: '',
+      weight: '',
       sex: 'F',
       TSH: '',
       T3: '',
@@ -190,6 +192,8 @@ function PredictionForm() {
                 placeholder="Enter age"
               />
             </div>
+          </div>
+          <div className="form-row">
             <div className="form-group">
               <label htmlFor="sex">Sex *</label>
               <select
@@ -202,6 +206,20 @@ function PredictionForm() {
                 <option value="F">Female</option>
                 <option value="M">Male</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="weight">Weight (kg) *</label>
+              <input
+                type="number"
+                id="weight"
+                name="weight"
+                value={formData.weight}
+                onChange={handleChange}
+                required
+                min="0"
+                step="0.1"
+                placeholder="Enter weight in kg"
+              />
             </div>
           </div>
         </div>
@@ -437,24 +455,7 @@ function PredictionForm() {
         </div>
 
         {/* Referral Source */}
-        <div className="form-section">
-          <h3 className="section-heading">Referral Information</h3>
-          <div className="form-group">
-            <label htmlFor="referral_source">Referral Source</label>
-            <select
-              id="referral_source"
-              name="referral_source"
-              value={formData.referral_source}
-              onChange={handleChange}
-            >
-              <option value="SVHC">SVHC</option>
-              <option value="SVI">SVI</option>
-              <option value="STMW">STMW</option>
-              <option value="SVHD">SVHD</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-        </div>
+
 
         {/* Form Actions */}
         <div className="form-actions">

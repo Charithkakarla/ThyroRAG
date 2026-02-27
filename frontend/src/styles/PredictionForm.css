@@ -272,16 +272,16 @@
 
 .result-container.error {
   background-color: var(--sage-50);
-  border-color: var(--sage-200);
+  border-color: var(--sage-500);
 }
 
 .result-container.error h3 {
-  color: var(--sage-700);
+  color: var(--sage-900);
 }
 
 /* Prediction specific result colors */
 .result-container.hyperthyroid .main-result {
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-800));
+  background: linear-gradient(135deg, var(--accent-500), var(--accent-900));
 }
 
 .result-container.hypothyroid .main-result {
@@ -297,17 +297,17 @@
   margin-top: 2rem;
   padding: 1.25rem 1.5rem;
   background-color: var(--accent-50);
-  border: 1px solid var(--accent-200);
+  border: 1px solid var(--accent-500);
   border-radius: 8px;
   font-size: 0.875rem;
-  color: var(--accent-800);
+  color: var(--accent-900);
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
 }
 
 .result-disclaimer i {
-  color: var(--accent-600);
+  color: var(--accent-500);
   font-size: 1.125rem;
 }
 

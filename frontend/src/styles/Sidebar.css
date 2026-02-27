@@ -11,7 +11,7 @@
   right: 0;
   height: 70px;
   background: var(--olive-900);
-  color: var(--text-light);
+  color: var(--text-white);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid var(--olive-800);
   z-index: 1001;
@@ -51,7 +51,7 @@
 }
 
 .header-action-btn:hover {
-  color: var(--primary-100);
+  color: var(--text-white);
 }
 
 .notif-badge {
@@ -70,7 +70,7 @@
   align-items: center;
   gap: 0.5rem;
   background-color: var(--olive-800);
-  color: var(--text-light);
+  color: var(--text-white);
   border: 1px solid var(--olive-700);
   padding: 0.5rem 1.25rem;
   border-radius: 8px;
@@ -82,6 +82,26 @@
 .header-login-btn:hover {
   background-color: var(--primary-600);
   border-color: var(--primary-500);
+}
+
+.user-info-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--olive-800);
+  color: var(--text-white);
+  border: 1px solid var(--olive-700);
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.user-name {
+  font-size: 0.875rem;
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-icon {
@@ -140,9 +160,9 @@
 }
 
 .toggle-btn {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
   border: none;
-  color: var(--text-light);
+  color: var(--olive-300);
   width: 36px;
   height: 36px;
   border-radius: 8px;
@@ -155,12 +175,9 @@
 }
 
 .toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
   transform: scale(1.05);
-}
-
-.toggle-btn i {
-  font-size: 1.5rem;
+  color: var(--text-white);
 }
 
 /* Navigation Menu */
@@ -200,13 +217,14 @@
 }
 
 .menu-link:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
   transform: translateX(4px);
+  color: var(--olive-200);
 }
 
 .menu-link.active {
   background: var(--olive-800);
-  color: var(--text-light);
+  color: var(--text-white);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
@@ -224,17 +242,20 @@
 
 .menu-icon {
   font-size: 1.75rem;
+  /* Fallback for boxicons */
   flex-shrink: 0;
   transition: transform 0.3s ease;
   color: var(--olive-400);
 }
 
-.menu-link.active .menu-icon {
-  color: var(--olive-200);
+/* Lucide Icon Sizing override if needed */
+.menu-link .lucide {
+  width: 24px;
+  height: 24px;
 }
 
-.menu-link:hover .menu-icon {
-  transform: scale(1.1);
+.menu-link.active .menu-icon {
+  color: var(--olive-200);
 }
 
 .menu-text {
@@ -278,10 +299,19 @@
   cursor: pointer;
   border-radius: 8px;
   transition: background 0.3s ease;
+  color: var(--olive-300);
+}
+
+.footer-btn {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 
 .footer-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-white);
 }
 
 .footer-text {
@@ -296,7 +326,10 @@
   width: 0;
 }
 
-/* Scrollbar hidden via global App.css styles */
+/* Scrollbar Styling */
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
 
 /* Responsive Design */
 @media (max-width: 768px) {
@@ -306,6 +339,18 @@
 
   .header-icon {
     font-size: 2rem;
+  }
+
+  .header-actions-static {
+    gap: 1rem;
+  }
+
+  .header-login-btn span {
+    display: none;
+  }
+
+  .header-login-btn {
+    padding: 0.5rem;
   }
 
   .header-title {

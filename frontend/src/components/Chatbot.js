@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 import { sendChatMessage } from '../services/api';
-import { Trash2, Upload, Send, Loader2 } from 'lucide-react';
 import '../styles/Chatbot.css';
 
 /**
@@ -47,7 +46,7 @@ function Chatbot() {
    */
   const handleSendMessage = async (e) => {
     e.preventDefault();
-
+    
     // Validate input
     if (!inputMessage.trim()) return;
 
@@ -67,7 +66,7 @@ function Chatbot() {
     try {
       // Send message to RAG backend
       const response = await sendChatMessage(inputMessage);
-
+      
       // Add AI response to chat
       const aiMessage = {
         id: Date.now() + 1,
@@ -75,11 +74,11 @@ function Chatbot() {
         sender: 'ai',
         timestamp: new Date().toISOString()
       };
-
+      
       setMessages(prev => [...prev, aiMessage]);
     } catch (err) {
       setError(err.message || 'Failed to get response. Please try again.');
-
+      
       // Add error message to chat
       const errorMessage = {
         id: Date.now() + 1,
@@ -144,7 +143,7 @@ function Chatbot() {
             timestamp={msg.timestamp}
           />
         ))}
-
+        
         {/* Typing Indicator */}
         {isLoading && (
           <div className="typing-indicator">
@@ -188,20 +187,20 @@ function Chatbot() {
 
       {/* Chat Input Area */}
       <div className="chat-input-container">
-        <button
-          className="clear-chat-btn"
+        <button 
+          className="clear-chat-btn" 
           onClick={handleClearChat}
           title="Clear chat history"
         >
-          <Trash2 size={20} />
+          <i className='bx bx-trash'></i>
         </button>
-
-        <button
-          className="upload-btn"
+        
+        <button 
+          className="upload-btn" 
           onClick={() => document.getElementById('file-upload').click()}
           title="Upload document"
         >
-          <Upload size={20} />
+          <i className='bx bx-upload'></i>
         </button>
         <input
           id="file-upload"
@@ -217,7 +216,7 @@ function Chatbot() {
             }
           }}
         />
-
+        
         <form onSubmit={handleSendMessage} className="chat-input-form">
           <textarea
             value={inputMessage}
@@ -233,7 +232,7 @@ function Chatbot() {
             className="send-button"
             disabled={isLoading || !inputMessage.trim()}
           >
-            {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+            {isLoading ? <i className='bx bx-loader-alt bx-spin'></i> : <i className='bx bx-send'></i>}
           </button>
         </form>
       </div>
