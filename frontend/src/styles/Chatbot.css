@@ -64,8 +64,8 @@
 }
 
 .message-bubble.user .message-content {
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
-  color: var(--text-light);
+  background: var(--olive-900);
+  color: #FFFFFF;
   border-radius: 18px 18px 4px 18px;
 }
 
@@ -183,12 +183,12 @@
 /* Suggested Questions */
 .suggested-questions {
   padding: 1rem 2rem;
-  background-color: var(--primary-50);
-  border-top: 1px solid var(--border-color);
+  background-color: var(--olive-900);
+  border-top: 1px solid var(--olive-800);
 }
 
 .suggestions-label {
-  color: var(--primary-600);
+  color: var(--olive-300);
   font-weight: 600;
   margin-bottom: 0.75rem;
   font-size: 0.95rem;
@@ -202,21 +202,22 @@
 
 .suggestion-chip {
   padding: 0.75rem 1rem;
-  background-color: var(--background);
-  border: 2px solid var(--primary-500);
-  color: var(--primary-600);
+  background-color: transparent;
+  border: 1.5px solid var(--olive-600);
+  color: var(--olive-200);
   border-radius: 20px;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   text-align: left;
 }
 
 .suggestion-chip:hover {
-  background-color: var(--primary-600);
-  color: var(--text-light);
+  background-color: var(--olive-700);
+  border-color: var(--olive-500);
+  color: #ffffff !important;
   transform: translateY(-2px);
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Chat Input Container */
@@ -267,8 +268,9 @@
 }
 
 .upload-btn:hover {
-  background-color: var(--primary-color);
-  color: var(--text-light);
+  background-color: var(--olive-900);
+  color: #FFFFFF;
+  border-color: var(--olive-900);
   transform: scale(1.1);
 }
 
@@ -308,8 +310,8 @@
 
 .send-button {
   padding: 0.75rem 1.25rem;
-  background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
-  color: var(--text-light);
+  background: var(--olive-900);
+  color: #FFFFFF;
   border: none;
   border-radius: 12px;
   cursor: pointer;

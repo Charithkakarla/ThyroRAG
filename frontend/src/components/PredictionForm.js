@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Loader2,
   Activity,
@@ -6,9 +6,11 @@ import {
   AlertCircle,
   BarChart2,
   PieChart,
-  Info
+  Info,
+  Upload,
+  CheckCircle2
 } from 'lucide-react';
-import { predictThyroidDisease } from '../services/api';
+import { predictThyroidDisease, parseUploadedFile } from '../services/api';
 import '../styles/PredictionForm.css';
 
 /**
@@ -57,6 +59,32 @@ function PredictionForm() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState(null); // { type: 'success'|'error', text }
+  const fileInputRef = useRef(null);
+
+  /**
+   * Handle patient data file upload (CSV or JSON).
+   * Calls the backend to parse the file and auto-fills the form.
+   */
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const data = await parseUploadedFile(file);
+      const fields = data.fields || {};
+      setFormData(prev => ({ ...prev, ...fields }));
+      setUploadMsg({ type: 'success', text: `Loaded data from "${file.name}" — ${Object.keys(fields).length} fields auto-filled.` });
+    } catch (err) {
+      setUploadMsg({ type: 'error', text: err.message || 'Failed to parse file.' });
+    } finally {
+      setUploading(false);
+      // Reset input so the same file can be re-uploaded
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   /**
    * Handle input changes for all form fields
@@ -86,6 +114,9 @@ function PredictionForm() {
       // Convert form data to proper types (numbers for numeric fields)
       const processedData = {
         ...medicalData,
+        // Include patient identity so backend can store & index them
+        full_name: fullName,
+        dob: dob,
         age: parseFloat(formData.age),
         TSH: formData.TSH ? parseFloat(formData.TSH) : null,
         T3: formData.T3 ? parseFloat(formData.T3) : null,
@@ -149,6 +180,47 @@ function PredictionForm() {
 
   return (
     <div className="prediction-form-container">
+      {/* ── Top-right file upload button ─────────────────────────── */}
+      <div className="prediction-form-header">
+        <div className="form-title">
+          <Activity size={22} />
+          <span>Thyroid Diagnosis Form</span>
+        </div>
+        <div className="upload-area">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.json"
+            id="patient-file-input"
+            style={{ display: 'none' }}
+            onChange={handleFileUpload}
+          />
+          <button
+            type="button"
+            className="upload-file-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload a CSV or JSON file to auto-fill the form"
+          >
+            {uploading
+              ? <Loader2 size={16} className="animate-spin" />
+              : <Upload size={16} />}
+            {uploading ? 'Parsing...' : 'Upload File'}
+          </button>
+        </div>
+      </div>
+
+      {/* Upload feedback banner */}
+      {uploadMsg && (
+        <div className={`upload-msg upload-msg-${uploadMsg.type}`}>
+          {uploadMsg.type === 'success'
+            ? <CheckCircle2 size={16} />
+            : <AlertCircle size={16} />}
+          <span>{uploadMsg.text}</span>
+          <button className="upload-msg-close" onClick={() => setUploadMsg(null)}>×</button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="prediction-form">
 
         {/* Basic Information Section */}

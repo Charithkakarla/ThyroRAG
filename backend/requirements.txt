@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-pydantic
+pydantic[email]
 joblib
 pandas
 numpy
@@ -8,9 +8,16 @@ catboost
 scikit-learn
 langchain
 langchain-community
-langchain-google-genai
+langchain-huggingface
+langchain-chroma
 chromadb
 sentence-transformers
 python-dotenv
-google-generativeai
 requests
+supabase
+# Clerk JWT verification
+PyJWT[crypto]
+httpx
+cryptography
+# Qdrant vector database
+qdrant-client

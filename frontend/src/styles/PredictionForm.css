@@ -14,10 +14,6 @@
 
 /* Form Styles */
 .prediction-form {
-  background-color: var(--background);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  border: 1px solid var(--olive-100);
   overflow: hidden;
 }
 
@@ -344,4 +340,105 @@
     text-align: left;
     width: 100%;
   }
+}
+
+/* ── Diagnosis Form Header with Upload Button ─────────────────── */
+.prediction-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2.5rem;
+  border-bottom: 2px solid var(--olive-100);
+  background: var(--olive-50, #f8f6f0);
+}
+
+.form-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--neutral-900);
+}
+
+.upload-area {
+  display: flex;
+  align-items: center;
+}
+
+.upload-file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 2px solid var(--olive-600, #6b7c3b);
+  background: transparent;
+  color: var(--olive-700, #576230);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  white-space: nowrap;
+}
+
+.upload-file-btn:hover:not(:disabled) {
+  background: var(--olive-600, #6b7c3b);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(107, 124, 59, 0.25);
+}
+
+.upload-file-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Upload feedback banner */
+.upload-msg {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 2.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  position: relative;
+}
+
+.upload-msg-success {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.upload-msg-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.upload-msg-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+
+.upload-msg-close:hover {
+  opacity: 1;
+}
+
+/* Spin animation for the upload loading icon */
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

@@ -1,22 +1,17 @@
-
+﻿
 import os
+from pathlib import Path
 from dotenv import load_dotenv
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 import requests
-import json
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
 
-# Load environment variables
-load_dotenv()
+load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Configuration
 DB_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-GROQ_MODEL = "llama-3.3-70b-versatile"  # Groq's latest Llama model
-GROQ_API_BASE = "https://api.groq.com/openai/v1"  # Groq API endpoint
+GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_API_BASE = "https://api.groq.com/openai/v1"
 
 
 class ThyroRAGEngine:
@@ -24,23 +19,19 @@ class ThyroRAGEngine:
         self.api_key = os.getenv("GROQ_API_KEY")
         if not self.api_key:
             print("[WARNING] GROQ_API_KEY not found in environment variables.")
-        
-        # Initialize Database Connection
-        db_url = os.getenv("DATABASE_URL")
-        if db_url:
-            self.engine = create_engine(db_url, echo=False)
-            self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
-            print("[OK] PostgreSQL connection established")
-        else:
-            self.engine = None
-            self.SessionLocal = None
-            print("[WARNING] DATABASE_URL not found, user data will not be included in RAG")
-        
-        # Initialize Embeddings
+
+        # Import Supabase client lazily to avoid circular imports
+        try:
+            from supabase_client import supabase
+            self.supabase = supabase
+            print("[OK] Supabase connection established for RAG context")
+        except Exception as e:
+            self.supabase = None
+            print(f"[WARNING] Could not connect to Supabase for RAG context: {e}")
+
         print("Loading embeddings...")
         self.embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-        
-        # Load Vector Store
+
         if os.path.exists(DB_DIR):
             self.vectorstore = Chroma(
                 persist_directory=DB_DIR,
@@ -52,134 +43,145 @@ class ThyroRAGEngine:
             print("[ERROR] Vector database NOT found. Run create_vector_db.py first.")
 
     def get_user_context(self):
-        """Fetch recent user data from PostgreSQL to include in RAG context"""
-        if not self.SessionLocal:
+        """Fetch recent prediction data from Supabase to include in RAG context."""
+        if not self.supabase:
             return ""
-        
         try:
-            db = self.SessionLocal()
-            
-            # Query recent users and predictions
-            query_text = """
-            SELECT 
-                u.username, 
-                u.full_name, 
-                u.patient_id,
-                u.sex,
-                u.created_at as user_created,
-                u.last_login,
-                p.age,
-                p.prediction,
-                p.confidence,
-                p."TSH",
-                p."T3",
-                p."TT4",
-                p.created_at as prediction_date
-            FROM users u
-            LEFT JOIN predictions p ON u.id = p.user_id
-            ORDER BY p.created_at DESC
-            LIMIT 10;
-            """
-            
-            result = db.execute(text(query_text))
-            rows = result.fetchall()
-            
+            resp = (
+                self.supabase.table("predictions")
+                .select("user_id, age, sex, prediction, confidence, tsh, t3, tt4, created_at")
+                .order("created_at", desc=True)
+                .limit(10)
+                .execute()
+            )
+            rows = resp.data or []
             if not rows:
-                db.close()
                 return ""
-            
-            # Format user data as context
-            user_context = "\n=== RECENT PATIENT DATA (From Database) ===\n"
-            
+
+            context = "\n=== RECENT PATIENT PREDICTIONS (From Supabase) ===\n"
             for row in rows:
-                username, full_name, patient_id, sex, user_created, last_login, age, prediction, confidence, tsh, t3, tt4, pred_date = row
-                
-                if prediction:  # Has prediction data
-                    user_context += f"\nPatient: {full_name} ({patient_id})\n"
-                    user_context += f"  - Registered: {user_created.strftime('%Y-%m-%d %H:%M') if user_created else 'N/A'}\n"
-                    user_context += f"  - Last Prediction: {pred_date.strftime('%Y-%m-%d %H:%M') if pred_date else 'N/A'}\n"
-                    user_context += f"  - Demographics: Age {age}, Sex {sex}\n"
-                    user_context += f"  - Lab Results: TSH={tsh}, T3={t3}, TT4={tt4}\n"
-                    user_context += f"  - Diagnosis: {prediction} (Confidence: {confidence:.1%})\n"
-            
-            db.close()
-            return user_context + "\n"
-            
+                context += (
+                    f"\nPatient ID: {row.get('user_id', 'N/A')}\n"
+                    f"  - Date: {row.get('created_at', 'N/A')}\n"
+                    f"  - Demographics: Age {row.get('age')}, Sex {row.get('sex')}\n"
+                    f"  - Lab: TSH={row.get('tsh')}, T3={row.get('t3')}, TT4={row.get('tt4')}\n"
+                    f"  - Diagnosis: {row.get('prediction')} "
+                    f"(Confidence: {float(row.get('confidence', 0)):.1%})\n"
+                )
+            return context + "\n"
         except Exception as e:
-            print(f"[WARNING] Error fetching user context: {e}")
+            print(f"[WARNING] Error fetching user context from Supabase: {e}")
             return ""
 
-    def get_response(self, query):
+    def add_patient_record(
+        self,
+        user_id: str,
+        full_name: str,
+        age,
+        sex: str,
+        tsh, t3, tt4, t4u, fti,
+        on_thyroxine: bool,
+        sick: bool,
+        pregnant: bool,
+        thyroid_surgery: bool,
+        prediction: str,
+        confidence: float,
+        dob: str = "",
+    ):
+        """Upsert a patient prediction record into ChromaDB so the RAG chatbot can reference it."""
         if not self.vectorstore:
-            return "I'm sorry, my knowledge base is currently being updated. Please try again later."
-        
+            print("[WARNING] Vector store not available — skipping ChromaDB upsert")
+            return
+        try:
+            import datetime
+            from langchain.docstore.document import Document
+
+            today = datetime.date.today().isoformat()
+
+            content = f"Patient Record: {full_name}\n"
+            if dob:
+                content += f"Date of Birth: {dob}\n"
+            content += f"A {age} year old {sex}.\n"
+            if on_thyroxine:
+                content += "Currently on thyroxine medication. "
+            if sick:
+                content += "Reported feeling sick. "
+            if pregnant:
+                content += "Patient is pregnant. "
+            if thyroid_surgery:
+                content += "Had previous thyroid surgery. "
+            content += f"\nLab Results (as of {today}): "
+            content += f"TSH: {tsh}, T3: {t3}, TT4: {tt4}, T4U: {t4u}, FTI: {fti}.\n"
+            content += f"Diagnosis: {prediction} (Confidence: {float(confidence):.1%})"
+
+            doc = Document(
+                page_content=content,
+                metadata={
+                    "source": "patient_prediction",
+                    "user_id": user_id,
+                    "patient_name": full_name,
+                    "prediction": prediction,
+                    "timestamp": today,
+                },
+            )
+            self.vectorstore.add_documents([doc])
+            print(f"[OK] Patient record for '{full_name}' added to ChromaDB")
+        except Exception as e:
+            print(f"[WARNING] Could not add patient record to ChromaDB: {e}")
+
+    def get_response(self, query: str) -> str:
+        if not self.vectorstore:
+            return "My knowledge base is currently being updated. Please try again later."
         if not self.api_key:
-            return "Groq API key is missing. Please configure it to use the RAG chatbot."
+            return "Groq API key is not configured."
 
         try:
-            # 1. Retrieve relevant documents from vector store
             docs = self.vectorstore.similarity_search(query, k=4)
             vector_context = "\n\n".join([d.page_content for d in docs])
-            
-            # 2. Get recent user data from PostgreSQL
             user_context = self.get_user_context()
-            
-            # 3. Combine both contexts
             full_context = user_context + vector_context
-            
-            # 4. Construct Prompt
-            prompt = f"""You are a specialized Medical Assistant focusing on Thyroid Health called ThyroRAG.
-Use the following pieces of retrieved context to answer the user's question.
-The context includes both general medical knowledge and recent patient data with timestamps.
-If the context doesn't contain the answer, say "I don't have enough information to answer that based on my database" and give a general helpful answer only if you are sure.
+
+            prompt = f"""You are ThyroRAG, a specialized Medical Assistant focusing on Thyroid Health.
+Use the retrieved context below to answer the user's question accurately.
+If the context doesn't contain the answer, provide a helpful general answer based on medical knowledge.
 
 Context:
 {full_context}
 
 Question: {query}
 
-Helpful Answer:"""
+Answer:"""
 
-            # 5. Call Groq API using OpenAI-compatible format
-            url = f"{GROQ_API_BASE}/chat/completions"
-            
             headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {self.api_key}'
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
             }
-            
             data = {
                 "model": GROQ_MODEL,
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a specialized Medical Assistant focusing on Thyroid Health called ThyroRAG. Provide accurate, helpful medical information based on the context provided."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "system", "content": "You are ThyroRAG, a medical assistant specializing in thyroid health."},
+                    {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.3,
-                "max_tokens": 1024
+                "max_tokens": 1024,
             }
-            
-            response = requests.post(url, headers=headers, json=data, timeout=30)
-            
-            # Handle rate limiting and quota errors
+
+            response = requests.post(
+                f"{GROQ_API_BASE}/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=30,
+            )
+
             if response.status_code == 429:
-                return "[QUOTA EXCEEDED] Groq API rate limit exceeded. Please try again in a moment."
-            
+                return "Rate limit reached. Please wait a moment and try again."
             if response.status_code != 200:
-                return f"[ERROR] Error from Groq API: {response.status_code}, {response.text}"
-            
+                return f"Error from Groq API ({response.status_code}): {response.text}"
+
             result = response.json()
-            
-            # Groq uses OpenAI-compatible response format
-            if 'choices' in result and len(result['choices']) > 0:
-                return result['choices'][0]['message']['content']
-            else:
-                return "I couldn't generate a response. Please try again."
+            if "choices" in result and result["choices"]:
+                return result["choices"][0]["message"]["content"]
+            return "Could not generate a response. Please try again."
 
         except Exception as e:
             import traceback
@@ -187,5 +189,4 @@ Helpful Answer:"""
             return f"Error generating response: {str(e)}"
 
 
-# Singleton instance
 rag_engine = ThyroRAGEngine()

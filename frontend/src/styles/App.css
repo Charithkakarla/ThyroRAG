@@ -126,6 +126,16 @@ body {
   font-weight: 600;
 }
 
+/* Clerk Auth Pages (SignIn / SignUp) */
+.clerk-auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--olive-900) 0%, var(--olive-700) 100%);
+  padding: 2rem;
+}
+
 /* Main Content */
 .main-content {
   flex: 1;

@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Settings as SettingsIcon,
-  User,
   Bell,
   Shield,
   Palette,
   Database,
-  Globe,
   HelpCircle,
   Save,
   Info
@@ -48,7 +45,6 @@ function Settings() {
   };
 
   const handleSave = () => {
-    // In a real app, this would save to backend
     localStorage.setItem('thyrorag_settings', JSON.stringify(settings));
     alert('Settings saved successfully!');
   };
@@ -56,7 +52,7 @@ function Settings() {
   return (
     <div className="settings-container">
       <div className="settings-grid">
-        
+
         {/* Notification Settings */}
         <div className="settings-section">
           <div className="section-header">

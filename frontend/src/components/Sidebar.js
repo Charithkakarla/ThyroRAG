@@ -1,27 +1,51 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  Activity,
   Brain,
   History,
-  Info,
   HeartPulse,
   ChevronRight,
   ChevronLeft,
-  Settings,
-  HelpCircle,
   Stethoscope,
-  Bell,
   LogOut,
-  User
+  UserCircle
 } from 'lucide-react';
 import '../styles/Sidebar.css';
 import 'boxicons/css/boxicons.min.css';
+
+/** Returns up to 2 uppercase initials from a name or email */
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Deterministic colour for the avatar based on name */
+function getAvatarColor(name) {
+  const palette = ['#4f8a5b', '#3d7a50', '#2f6842', '#5a9665', '#6aaa76'];
+  if (!name) return palette[0];
+  return palette[name.charCodeAt(0) % palette.length];
+}
 
 /**
  * Collapsible Sidebar Component
  * Features navigation with Lucide icons and smooth collapse/expand animation
  */
 function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab, user, onLogout }) {
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const menuItems = [
     {
       id: 'prediction',
@@ -40,18 +64,6 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab, user, on
       icon: History,
       label: 'Patient History',
       description: 'Past Records'
-    },
-    {
-      id: 'settings',
-      icon: Settings,
-      label: 'Settings',
-      description: 'Preferences'
-    },
-    {
-      id: 'about',
-      icon: Info,
-      label: 'Documentation',
-      description: 'System Info'
     }
   ];
 
@@ -69,14 +81,62 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab, user, on
           </div>
 
           <div className="header-actions-static">
-            <button className="header-action-btn" title="Notifications">
-              <Bell size={20} />
-              <span className="notif-badge"></span>
-            </button>
+            {/* Profile Avatar with Dropdown */}
             {user && (
-              <div className="user-info-header">
-                <User size={18} />
-                <span className="user-name">{user.fullName}</span>
+              <div className="profile-avatar-wrapper" ref={profileRef}>
+                <button
+                  className="profile-avatar-btn"
+                  onClick={() => setShowProfileMenu(prev => !prev)}
+                  title={user.fullName}
+                  aria-label="Open profile menu"
+                >
+                  <div
+                    className="avatar-circle"
+                    style={{ background: getAvatarColor(user.fullName) }}
+                  >
+                    {getInitials(user.fullName)}
+                  </div>
+                </button>
+
+                {showProfileMenu && (
+                  <div className="profile-dropdown">
+                    {/* Header */}
+                    <div className="profile-dropdown-header">
+                      <div
+                        className="avatar-circle avatar-circle-lg"
+                        style={{ background: getAvatarColor(user.fullName) }}
+                      >
+                        {getInitials(user.fullName)}
+                      </div>
+                      <div className="profile-dropdown-info">
+                        <p className="profile-dropdown-name">{user.fullName}</p>
+                        <p className="profile-dropdown-email">{user.username}</p>
+                      </div>
+                    </div>
+
+                    <div className="profile-dropdown-divider" />
+
+                    {/* Profile Settings */}
+                    <button
+                      className="profile-menu-item"
+                      onClick={() => { setActiveTab('profile'); setShowProfileMenu(false); }}
+                    >
+                      <UserCircle size={15} />
+                      Profile Settings
+                    </button>
+
+                    <div className="profile-dropdown-divider" />
+
+                    {/* Logout */}
+                    <button
+                      className="profile-menu-item profile-menu-logout"
+                      onClick={() => { onLogout(); setShowProfileMenu(false); }}
+                    >
+                      <LogOut size={15} />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -122,17 +182,6 @@ function Sidebar({ isCollapsed, toggleSidebar, activeTab, setActiveTab, user, on
           </ul>
         </nav>
 
-        {/* Sidebar Footer */}
-        <div className="sidebar-footer">
-          <button
-            className="footer-item footer-btn"
-            onClick={onLogout}
-            title={isCollapsed ? 'Logout' : ''}
-          >
-            <LogOut className="menu-icon" size={20} />
-            {!isCollapsed && <span className="footer-text">Logout</span>}
-          </button>
-        </div>
       </div>
     </>
   );

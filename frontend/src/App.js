@@ -1,57 +1,86 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { useUser, useAuth as useClerkAuth, SignIn, SignUp } from '@clerk/react';
 import PredictionForm from './components/PredictionForm';
 import Chatbot from './components/Chatbot';
 import PatientHistory from './components/PatientHistory';
 import Settings from './components/Settings';
-import Login from './components/Login';
+import ProfileSettings from './components/ProfileSettings';
 import Sidebar from './components/Sidebar';
+import { supabase } from './supabase/supabaseClient';
+import { setTokenGetter } from './services/api';
 import './styles/App.css';
 
 /**
  * Main App Component
- * Contains authentication and main sections:
- * 1. Thyroid Disease Prediction Form
- * 2. RAG-powered Medical Chatbot
- * 3. Patient History
- * 4. Settings
+ * Authentication is handled entirely by Clerk.
+ * Supabase is used only as a database (predictions, queries, profiles).
  */
 function App() {
+  const { user, isLoaded, isSignedIn } = useUser();
+  const { signOut, getToken } = useClerkAuth();
   const [activeTab, setActiveTab] = useState('prediction');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Check for stored user session on mount
+  // Wire the Clerk token into the API service layer
   useEffect(() => {
-    const storedUser = localStorage.getItem('thyrorag_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
-  }, []);
+    setTokenGetter(getToken);
+  }, [getToken]);
 
-  const handleLogin = (userData) => {
-    setUser(userData);
-  };
+  // Sync/upsert Clerk user into Supabase `profiles` table on every login
+  useEffect(() => {
+    if (!isSignedIn || !user) return;
+    const upsertProfile = async () => {
+      try {
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            email: user.primaryEmailAddress?.emailAddress ?? '',
+            name: user.fullName ?? '',
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+      } catch (e) {
+        console.warn('[Profile sync]', e);
+      }
+    };
+    upsertProfile();
+  }, [isSignedIn, user]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('thyrorag_user');
-    setUser(null);
+  const handleLogout = async () => {
+    await signOut();
     setActiveTab('prediction');
   };
 
-  const toggleSidebar = () => {
-    setIsSidebarCollapsed(!isSidebarCollapsed);
-  };
+  const toggleSidebar = () => setIsSidebarCollapsed(c => !c);
 
-  // Show loading state
-  if (isLoading) {
+  if (!isLoaded) {
     return <div className="loading-screen">Loading...</div>;
   }
 
-  // Show login if not authenticated
-  if (!user) {
-    return <Login onLogin={handleLogin} />;
+  // Unauthenticated: show Clerk-hosted Sign In / Sign Up
+  if (!isSignedIn) {
+    return (
+      <Routes>
+        <Route
+          path="/sign-up/*"
+          element={
+            <div className="clerk-auth-page">
+              <SignUp routing="path" path="/sign-up" afterSignUpUrl="/" />
+            </div>
+          }
+        />
+        <Route
+          path="/*"
+          element={
+            <div className="clerk-auth-page">
+              <SignIn routing="path" path="/" afterSignInUrl="/" />
+            </div>
+          }
+        />
+      </Routes>
+    );
   }
 
   const renderContent = () => {
@@ -69,17 +98,7 @@ function App() {
           </div>
         );
       case 'chatbot':
-        return (
-          <div className="section-container">
-            <h2 className="section-title">
-              <i className='bx bx-brain'></i> AI Medical Assistant
-            </h2>
-            <p className="section-description">
-              Ask questions about symptoms, diagnosis, and thyroid health.
-            </p>
-            <Chatbot />
-          </div>
-        );
+        return <Chatbot />;
       case 'history':
         return (
           <div className="section-container">
@@ -114,11 +133,23 @@ function App() {
             </div>
           </div>
         );
+      case 'profile':
+        return (
+          <div className="section-container">
+            <h2 className="section-title">
+              <i className='bx bx-user-circle'></i> Profile Settings
+            </h2>
+            <p className="section-description">
+              Manage your account display name and personal information.
+            </p>
+            <ProfileSettings />
+          </div>
+        );
       case 'settings':
         return (
           <div className="section-container">
             <h2 className="section-title">
-              <i className='bx bx-cog'></i> Settings
+              <i className='bx bx-cog'></i> General Settings
             </h2>
             <p className="section-description">
               Manage your preferences and system configuration.
@@ -132,22 +163,30 @@ function App() {
   };
 
   return (
-    <div className="App">
-      {/* Collapsible Sidebar */}
-      <Sidebar
-        isCollapsed={isSidebarCollapsed}
-        toggleSidebar={toggleSidebar}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
-        onLogout={handleLogout}
+    <Routes>
+      <Route
+        path="/*"
+        element={
+          <div className="App">
+            <Sidebar
+              isCollapsed={isSidebarCollapsed}
+              toggleSidebar={toggleSidebar}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              user={{
+                username: user.primaryEmailAddress?.emailAddress ?? '',
+                fullName: user.fullName || user.primaryEmailAddress?.emailAddress || 'User',
+                role: 'Patient',
+              }}
+              onLogout={handleLogout}
+            />
+            <main className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+              {renderContent()}
+            </main>
+          </div>
+        }
       />
-
-      {/* Main Content Area */}
-      <main className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-        {renderContent()}
-      </main>
-    </div>
+    </Routes>
   );
 }
 
