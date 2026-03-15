@@ -4,28 +4,34 @@
 -- ============================================================
 
 -- ── 1. PROFILES ─────────────────────────────────────────────
+-- NOTE: id is TEXT because Clerk user IDs (e.g. "user_abc123") are not UUIDs
 CREATE TABLE IF NOT EXISTS profiles (
-  id          UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   full_name   TEXT,
   age         INTEGER,
-  gender      TEXT CHECK (gender IN (''M'', ''F'', ''Other'')),
+  gender      TEXT CHECK (gender IN ('M', 'F', 'Other')),
   phone       TEXT,
-  role        TEXT DEFAULT ''Patient'' CHECK (role IN (''Patient'', ''Doctor'', ''Admin'')),
+  role        TEXT DEFAULT 'Patient' CHECK (role IN ('Patient', 'Doctor', 'Admin')),
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own profile"   ON profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can view all profiles" ON profiles FOR SELECT
-  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = ''Admin''));
+DROP POLICY IF EXISTS "Users can view own profile"   ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
+DROP POLICY IF EXISTS "Service role full access on profiles" ON profiles;
+
+CREATE POLICY "Users can view own profile"   ON profiles FOR SELECT USING (auth.uid()::text = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid()::text = id);
+CREATE POLICY "Service role full access on profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
 
 -- ── 2. PREDICTIONS ───────────────────────────────────────────
+-- NOTE: user_id is TEXT to store Clerk user IDs ("user_abc123" format, not UUID)
 CREATE TABLE IF NOT EXISTS predictions (
   id               UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id          UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  user_id          TEXT NOT NULL,
   age              FLOAT,
   sex              TEXT,
   weight           FLOAT,
@@ -63,14 +69,19 @@ CREATE TABLE IF NOT EXISTS predictions (
 
 ALTER TABLE predictions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own predictions"   ON predictions FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own predictions" ON predictions FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Service role full access on predictions" ON predictions USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view own predictions"          ON predictions;
+DROP POLICY IF EXISTS "Users can insert own predictions"        ON predictions;
+DROP POLICY IF EXISTS "Service role full access on predictions" ON predictions;
+
+CREATE POLICY "Users can view own predictions"   ON predictions FOR SELECT USING (auth.uid()::text = user_id);
+CREATE POLICY "Users can insert own predictions" ON predictions FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Service role full access on predictions" ON predictions FOR ALL USING (true) WITH CHECK (true);
 
 -- ── 3. REPORTS ───────────────────────────────────────────────
+-- NOTE: user_id is TEXT to store Clerk user IDs
 CREATE TABLE IF NOT EXISTS reports (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id      UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  user_id      TEXT NOT NULL,
   file_name    TEXT NOT NULL,
   file_url     TEXT NOT NULL,
   file_type    TEXT,
@@ -81,14 +92,19 @@ CREATE TABLE IF NOT EXISTS reports (
 
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own reports"   ON reports FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own reports" ON reports FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own reports" ON reports FOR DELETE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can view own reports"   ON reports;
+DROP POLICY IF EXISTS "Users can insert own reports" ON reports;
+DROP POLICY IF EXISTS "Users can delete own reports" ON reports;
+
+CREATE POLICY "Users can view own reports"   ON reports FOR SELECT USING (auth.uid()::text = user_id);
+CREATE POLICY "Users can insert own reports" ON reports FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Users can delete own reports" ON reports FOR DELETE USING (auth.uid()::text = user_id);
 
 -- ── 4. QUERIES (RAG Chat History) ───────────────────────────
+-- NOTE: user_id is TEXT to store Clerk user IDs
 CREATE TABLE IF NOT EXISTS queries (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id    UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  user_id    TEXT NOT NULL,
   question   TEXT NOT NULL,
   answer     TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -96,16 +112,22 @@ CREATE TABLE IF NOT EXISTS queries (
 
 ALTER TABLE queries ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own queries"   ON queries FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own queries" ON queries FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Service role full access on queries" ON queries USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view own queries"          ON queries;
+DROP POLICY IF EXISTS "Users can insert own queries"        ON queries;
+DROP POLICY IF EXISTS "Service role full access on queries" ON queries;
+
+CREATE POLICY "Users can view own queries"   ON queries FOR SELECT USING (auth.uid()::text = user_id);
+CREATE POLICY "Users can insert own queries" ON queries FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Service role full access on queries" ON queries FOR ALL USING (true) WITH CHECK (true);
 
 -- ── 5. Auto-create profile on signup ────────────────────────
+-- NOTE: This trigger fires for Supabase-native signups only.
+-- For Clerk-authenticated users, profiles are upserted by the backend on first login.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.profiles (id, full_name)
-  VALUES (NEW.id, NEW.raw_user_meta_data->>''full_name'')
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name')
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;

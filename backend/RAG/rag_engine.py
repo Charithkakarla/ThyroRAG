@@ -1,15 +1,15 @@
-﻿
-import os
+﻿import os
+import uuid
 from pathlib import Path
-from dotenv import load_dotenv
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+
 import requests
+from dotenv import load_dotenv
+
+from vector_db.document_ingestion import ingestion_service
+from vector_db.vector_search import vector_search_service
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_API_BASE = "https://api.groq.com/openai/v1"
 
@@ -28,32 +28,22 @@ class ThyroRAGEngine:
         except Exception as e:
             self.supabase = None
             print(f"[WARNING] Could not connect to Supabase for RAG context: {e}")
+        print("[OK] ThyroRAG configured to use Qdrant for retrieval")
 
-        print("Loading embeddings...")
-        self.embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-
-        if os.path.exists(DB_DIR):
-            self.vectorstore = Chroma(
-                persist_directory=DB_DIR,
-                embedding_function=self.embeddings
-            )
-            print("[OK] Vector database loaded successfully")
-        else:
-            self.vectorstore = None
-            print("[ERROR] Vector database NOT found. Run create_vector_db.py first.")
-
-    def get_user_context(self):
+    def get_user_context(self, user_id: str = ""):
         """Fetch recent prediction data from Supabase to include in RAG context."""
         if not self.supabase:
             return ""
         try:
-            resp = (
+            query = (
                 self.supabase.table("predictions")
                 .select("user_id, age, sex, prediction, confidence, tsh, t3, tt4, created_at")
                 .order("created_at", desc=True)
                 .limit(10)
-                .execute()
             )
+            if user_id:
+                query = query.eq("user_id", user_id)
+            resp = query.execute()
             rows = resp.data or []
             if not rows:
                 return ""
@@ -88,13 +78,9 @@ class ThyroRAGEngine:
         confidence: float,
         dob: str = "",
     ):
-        """Upsert a patient prediction record into ChromaDB so the RAG chatbot can reference it."""
-        if not self.vectorstore:
-            print("[WARNING] Vector store not available — skipping ChromaDB upsert")
-            return
+        """Upsert a patient prediction record into Qdrant for chat retrieval."""
         try:
             import datetime
-            from langchain.docstore.document import Document
 
             today = datetime.date.today().isoformat()
 
@@ -114,43 +100,106 @@ class ThyroRAGEngine:
             content += f"TSH: {tsh}, T3: {t3}, TT4: {tt4}, T4U: {t4u}, FTI: {fti}.\n"
             content += f"Diagnosis: {prediction} (Confidence: {float(confidence):.1%})"
 
-            doc = Document(
-                page_content=content,
-                metadata={
-                    "source": "patient_prediction",
+            ingestion_service.ingest_document(
+                text=content,
+                source="patient_prediction",
+                document_id=f"prediction_{user_id}_{uuid.uuid4().hex[:12]}",
+                extra_metadata={
+                    "category": "patient_prediction",
                     "user_id": user_id,
                     "patient_name": full_name,
                     "prediction": prediction,
                     "timestamp": today,
                 },
             )
-            self.vectorstore.add_documents([doc])
-            print(f"[OK] Patient record for '{full_name}' added to ChromaDB")
+            print(f"[OK] Patient record for '{full_name}' added to Qdrant")
         except Exception as e:
-            print(f"[WARNING] Could not add patient record to ChromaDB: {e}")
+            print(f"[WARNING] Could not add patient record to Qdrant: {e}")
 
-    def get_response(self, query: str) -> str:
-        if not self.vectorstore:
-            return "My knowledge base is currently being updated. Please try again later."
+    def get_response(self, query: str, extra_context: str = "", user_id: str = "", history=None) -> str:
         if not self.api_key:
             return "Groq API key is not configured."
 
         try:
-            docs = self.vectorstore.similarity_search(query, k=4)
-            vector_context = "\n\n".join([d.page_content for d in docs])
-            user_context = self.get_user_context()
-            full_context = user_context + vector_context
+            qdrant_context = ""
+            try:
+                hits = vector_search_service.search(
+                    query=query,
+                    top_k=10,
+                    score_threshold=0.15,
+                )
+                parts = []
+                for hit in hits:
+                    hit_user_id = hit.get("user_id")
+                    category = hit.get("category")
+                    source = hit.get("source", "qdrant")
+                    text = (hit.get("chunk_text") or "").strip()
+                    if not text:
+                        continue
+                    if hit_user_id and user_id and hit_user_id != user_id:
+                        continue
+                    if extra_context and category == "patient_upload" and hit_user_id == user_id:
+                        continue
+                    parts.append(f"[Qdrant: {source}]\n{text}")
+                if parts:
+                    qdrant_context = "\n\n".join(parts[:4])
+            except Exception as search_exc:
+                print(f"[WARNING] Qdrant search failed inside rag_engine: {search_exc}")
 
-            prompt = f"""You are ThyroRAG, a specialized Medical Assistant focusing on Thyroid Health.
-Use the retrieved context below to answer the user's question accurately.
-If the context doesn't contain the answer, provide a helpful general answer based on medical knowledge.
+            user_context = self.get_user_context(user_id)
 
-Context:
-{full_context}
+            conversation_context = ""
+            if history:
+                parts = []
+                for item in history[-8:]:
+                    role = item.get("sender") or item.get("role") or "user"
+                    text = (item.get("text") or item.get("content") or "").strip()
+                    if not text:
+                        continue
+                    label = "User" if role in ("user", "human") else "Assistant"
+                    parts.append(f"{label}: {text}")
+                if parts:
+                    conversation_context = "=== RECENT CONVERSATION ===\n" + "\n".join(parts) + "\n\n"
 
-Question: {query}
-
-Answer:"""
+            # ── Build system + user prompts depending on whether a document was uploaded ──
+            if extra_context:
+                # Uploaded document content is available — use both sources but
+                # tell the LLM to prioritise the uploaded document for any
+                # patient-specific questions and use the knowledge base for
+                # general medical context.
+                system_prompt = (
+                    "You are ThyroRAG, a medical assistant specialising in thyroid health. "
+                    "You have two sources of information:\n"
+                    "1. An UPLOADED DOCUMENT (lab report / patient file) — treat this as ground truth for patient-specific questions.\n"
+                    "2. A THYROID KNOWLEDGE BASE containing reference data, past cases, and medical guidelines.\n\n"
+                    "Rules:\n"
+                    "- For questions about 'my report', 'my results', 'what does it say', specific names/values from the report: "
+                    "answer ONLY from the uploaded document. Do NOT mix in training dataset patients.\n"
+                    "- If the user asks to extract patient details from the uploaded file, list each patient separately and quote the values from the uploaded document.\n"
+                    "- For general thyroid questions (symptoms, treatments, what TSH means, etc.): "
+                    "use the knowledge base alongside the uploaded document for context.\n"
+                    "- Always present lab values exactly as they appear in the uploaded document.\n"
+                    "- Always recommend consulting a qualified healthcare professional."
+                )
+                user_prompt = (
+                    f"{conversation_context}"
+                    f"=== UPLOADED DOCUMENT (Primary Source) ===\n{extra_context}\n\n"
+                    f"=== THYROID KNOWLEDGE BASE (Reference) ===\n{user_context}{qdrant_context}\n\n"
+                    f"User question: {query}\n\nAnswer:"
+                )
+            else:
+                # No uploaded document — answer from knowledge base only
+                system_prompt = (
+                    "You are ThyroRAG, a medical assistant specializing in thyroid health. "
+                    "Answer the user's question using the provided context. "
+                    "If the context doesn't contain the answer, provide a helpful general answer based on medical knowledge. "
+                    "Always recommend consulting a qualified healthcare professional."
+                )
+                user_prompt = (
+                    f"{conversation_context}"
+                    f"Context:\n{user_context}{qdrant_context}\n\n"
+                    f"Question: {query}\n\nAnswer:"
+                )
 
             headers = {
                 "Content-Type": "application/json",
@@ -159,10 +208,10 @@ Answer:"""
             data = {
                 "model": GROQ_MODEL,
                 "messages": [
-                    {"role": "system", "content": "You are ThyroRAG, a medical assistant specializing in thyroid health."},
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_prompt},
                 ],
-                "temperature": 0.3,
+                "temperature": 0.2,
                 "max_tokens": 1024,
             }
 

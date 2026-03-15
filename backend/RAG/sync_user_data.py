@@ -3,23 +3,17 @@ Script to sync user data from PostgreSQL to vector database
 Run this periodically to keep RAG context updated with latest users
 """
 import os
-import sys
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
-from langchain.docstore.document import Document
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+
+from vector_db.document_ingestion import ingestion_service
 
 # Load environment
 load_dotenv()
 
-# Configuration
-DB_DIR = "chroma_db"
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-
 def sync_user_data_to_vectorstore():
-    """Fetch user data from PostgreSQL and add to vector database"""
-    print("🔄 Starting user data sync to vector database...")
+    """Fetch user data from PostgreSQL and add to Qdrant."""
+    print("🔄 Starting user data sync to Qdrant...")
     
     # 1. Connect to PostgreSQL
     db_url = os.getenv("DATABASE_URL")
@@ -67,7 +61,7 @@ def sync_user_data_to_vectorstore():
     
     print(f"✅ Found {len(rows)} prediction records")
     
-    # 3. Convert to LangChain Documents
+    # 3. Convert rows into Qdrant documents
     documents = []
     
     for row in rows:
@@ -93,34 +87,21 @@ def sync_user_data_to_vectorstore():
         content += f"TSH: {tsh}, T3: {t3}, TT4: {tt4}, T4U: {t4u}, FTI: {fti}. "
         content += f"\nDiagnosis: {prediction} (Confidence: {confidence:.1%})"
         
-        doc = Document(
-            page_content=content,
-            metadata={
-                "source": "postgresql_users",
+        documents.append({
+            "text": content,
+            "source": "postgresql_users",
+            "document_id": f"postgres_user_{patient_id}_{pred_date.strftime('%Y%m%d_%H%M%S')}",
+            "extra_metadata": {
+                "category": "patient_prediction",
                 "patient_id": patient_id,
                 "prediction": prediction,
-                "timestamp": pred_date.isoformat()
-            }
-        )
-        documents.append(doc)
-    
-    # 4. Load existing vector store and add new documents
-    print("🤖 Loading embeddings...")
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    
-    if os.path.exists(DB_DIR):
-        print("📚 Loading existing vector database...")
-        vectorstore = Chroma(
-            persist_directory=DB_DIR,
-            embedding_function=embeddings
-        )
-        
-        print("➕ Adding user documents to vector store...")
-        vectorstore.add_documents(documents)
-        
-        print(f"✅ Successfully added {len(documents)} user records to vector database!")
-    else:
-        print("❌ Vector database not found. Run create_vector_db.py first!")
+                "timestamp": pred_date.isoformat(),
+            },
+        })
+
+    print("➕ Adding user documents to Qdrant...")
+    ingestion_service.ingest_documents(documents)
+    print(f"✅ Successfully added {len(documents)} user records to Qdrant!")
 
 if __name__ == "__main__":
     sync_user_data_to_vectorstore()

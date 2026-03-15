@@ -24,17 +24,19 @@ Architecture
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from auth.auth_middleware import get_current_user
 from vector_db.document_ingestion import ingestion_service
+from vector_db.tika_service import extract_text as tika_extract_text
 from vector_db.vector_search import vector_search_service
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -89,6 +91,23 @@ class QueryRequest(BaseModel):
     metadata_filter: Optional[Dict[str, Any]] = Field(
         None, description="Optional Qdrant payload filter (e.g. {'source': 'doc.pdf'})."
     )
+
+
+class ReportContentRequest(BaseModel):
+    """Body for POST /rag/generate-report-content."""
+    condition: str = Field(..., description="Detected thyroid condition label.")
+    age: Optional[float] = Field(None)
+    sex: Optional[str] = Field(None)
+    tsh: Optional[float] = Field(None)
+    t3: Optional[float] = Field(None)
+    tt4: Optional[float] = Field(None)
+    t4u: Optional[float] = Field(None)
+    fti: Optional[float] = Field(None)
+    on_thyroxine: Optional[bool] = Field(None)
+    on_antithyroid_medication: Optional[bool] = Field(None)
+    thyroid_surgery: Optional[bool] = Field(None)
+    pregnant: Optional[bool] = Field(None)
+    sick: Optional[bool] = Field(None)
 
 
 class RetrievedChunk(BaseModel):
@@ -306,3 +325,207 @@ async def delete_document(
         return {"deleted_chunks": deleted, "document_id": document_id, "status": "ok"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post(
+    "/upload-file",
+    summary="Upload any file, extract text via Apache Tika, and ingest into Qdrant",
+)
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    """
+    **Universal file upload endpoint powered by Apache Tika.**
+
+    Supports any format Tika understands, including:
+    - Documents: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), PowerPoint, OpenDocument
+    - Text: plain text, HTML, XML, Markdown, CSV, JSON
+    - Images (with OCR): JPEG, PNG, TIFF, BMP, GIF
+    - e-Books: EPUB
+    - Archives: ZIP, TAR (extracts and processes contained files)
+
+    Pipeline:
+    1. Read the uploaded file bytes.
+    2. Send to Apache Tika server (Docker) for text extraction / OCR.
+    3. Chunk and embed the extracted text.
+    4. Upsert into Qdrant so the RAG chatbot can reference the document.
+    """
+    # Read entire file into memory
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    upload_dir = Path(__file__).parent.parent / "RAG" / "uploaded_files"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    original_filename = file.filename or "uploaded_file"
+    safe_name = f"{timestamp_str}_{original_filename.replace(' ', '_')}"
+    save_path = upload_dir / safe_name
+    save_path.write_bytes(content)
+
+    mime_type = file.content_type or "application/octet-stream"
+
+    # Extract text via Apache Tika
+    tika_error = None
+    try:
+        extracted_text = tika_extract_text(content, mime_type)
+    except RuntimeError as exc:
+        extracted_text = ""
+        tika_error = str(exc)
+
+    if (not extracted_text or not extracted_text.strip()) and mime_type != "application/octet-stream":
+        try:
+            extracted_text = tika_extract_text(content, "application/octet-stream")
+        except RuntimeError:
+            pass
+
+    if tika_error and (not extracted_text or not extracted_text.strip()):
+        raise HTTPException(status_code=503, detail=str(tika_error))
+
+    extracted_text = extracted_text.strip() if extracted_text else ""
+    warning = None
+    if not extracted_text:
+        # Use a stub so the upload never hard-fails (e.g. image without OCR)
+        extracted_text = (
+            f"[Uploaded file: {original_filename}]\n"
+            f"[MIME type: {mime_type}]\n"
+            "[No text could be extracted — the file may be a binary/image without OCR support.]"
+        )
+        warning = "OCR could not extract readable text from this file. The chatbot can reference the filename, but answers will be limited until a readable document is uploaded."
+
+    # Ingest extracted text into Qdrant
+    document_id = str(uuid.uuid4())
+    try:
+        chunk_ids = ingestion_service.ingest_document(
+            text=extracted_text,
+            source=f"RAG/uploaded_files/{safe_name}",
+            document_id=document_id,
+            extra_metadata={
+                "original_filename": original_filename,
+                "saved_filename": safe_name,
+                "content_type": mime_type,
+                "category": "patient_upload",
+                "user_id": current_user.id,
+                "upload_timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Ingestion error: {exc}")
+
+    return {
+        "status": "ok",
+        "document_id": document_id,
+        "filename": original_filename,
+        "saved_as": safe_name,
+        "extracted_chars": len(extracted_text),
+        "extracted_preview": extracted_text[:600],
+        "chunks_ingested": len(chunk_ids),
+        "warning": warning,
+    }
+
+
+# ── Report content generation via Groq ───────────────────────────────────────
+
+@router.post(
+    "/generate-report-content",
+    summary="Generate AI diet recommendations and hospital list for a PDF report",
+)
+async def generate_report_content(body: ReportContentRequest):
+    """
+    Calls Groq LLM to produce personalised diet recommendations and a list of
+    recommended hospitals in Hyderabad for the patient's thyroid condition.
+    Returns a JSON object with 'diet' and 'hospitals' keys.
+    This endpoint is intentionally unauthenticated so the PDF can be generated
+    immediately after a prediction without an extra auth round-trip.
+    """
+    condition = body.condition or "thyroid disorder"
+    lab_context = []
+    if body.tsh is not None:
+        lab_context.append(f"TSH: {body.tsh}")
+    if body.t3 is not None:
+        lab_context.append(f"T3: {body.t3}")
+    if body.tt4 is not None:
+        lab_context.append(f"TT4: {body.tt4}")
+    if body.t4u is not None:
+        lab_context.append(f"T4U: {body.t4u}")
+    if body.fti is not None:
+        lab_context.append(f"FTI: {body.fti}")
+
+    patient_context = []
+    if body.age is not None:
+        patient_context.append(f"Age: {body.age}")
+    if body.sex:
+        patient_context.append(f"Sex: {'Male' if body.sex == 'M' else 'Female'}")
+    if lab_context:
+        patient_context.append("Lab values — " + ", ".join(lab_context))
+
+    medical_history = []
+    if body.on_thyroxine:              medical_history.append("on thyroxine medication")
+    if body.on_antithyroid_medication: medical_history.append("on antithyroid medication")
+    if body.thyroid_surgery:           medical_history.append("previous thyroid surgery")
+    if body.pregnant:                  medical_history.append("pregnant")
+    if body.sick:                      medical_history.append("currently sick")
+    if medical_history:
+        patient_context.append("Medical history — " + ", ".join(medical_history))
+
+    patient_summary = "; ".join(patient_context) if patient_context else "details not provided"
+
+    system_prompt = (
+        "You are a board-certified clinical nutritionist and endocrinologist. "
+        "You provide accurate, evidence-based dietary and exercise guidance and medical referrals. "
+        "Always respond with valid JSON only — no markdown, no extra text."
+    )
+
+    user_prompt = (
+        f"A patient has been diagnosed with: {condition}.\n"
+        f"Patient profile: {patient_summary}.\n\n"
+        "Return a JSON object with exactly this structure:\n"
+        "{\n"
+        '  "diet": {\n'
+        '    "recommended": ["<6-8 specific foods or nutrients suited for this condition>"],\n'
+        '    "avoid": ["<5-7 foods or habits to avoid for this condition>"],\n'
+        '    "tips": ["<4-5 practical dietary and lifestyle tips for this condition>"]\n'
+        "  },\n"
+        '  "exercises": [\n'
+        '    "<7-9 specific exercise recommendations with duration/frequency tailored to this condition. '
+        'For hyperthyroid: low-impact only with caution on heart rate. '
+        'For hypothyroid: moderate aerobic to boost metabolism. '
+        'For negative/normal: general wellness routine.>"\n'
+        "  ],\n"
+        '  "hospitals": [\n'
+        '    {"name": "<hospital name>", "area": "<area in Hyderabad>", '
+        '"specialty": "<relevant specialty>", "contact": "<phone number if known, else empty string>"}\n'
+        "    // provide exactly 7 well-known hospitals in Hyderabad, India "
+        "that treat thyroid and endocrine disorders\n"
+        "  ]\n"
+        "}\n\n"
+        "Use only real, well-known institutions. Respond with raw JSON only."
+    )
+
+    raw = _call_groq(system_prompt, user_prompt, max_tokens=1600)
+
+    # Attempt to parse the JSON response from the LLM
+    import json as _json
+    import re as _re
+
+    # Strip any accidental markdown code fences
+    cleaned = _re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
+
+    try:
+        content = _json.loads(cleaned)
+    except _json.JSONDecodeError:
+        # Try to extract just the JSON object if there is surrounding prose
+        match = _re.search(r"\{.*\}", cleaned, _re.DOTALL)
+        if match:
+            try:
+                content = _json.loads(match.group())
+            except _json.JSONDecodeError:
+                content = {}
+        else:
+            content = {}
+
+    return {"status": "ok", "content": content, "raw": raw if not content else None}
+

@@ -9,8 +9,6 @@ scikit-learn
 langchain
 langchain-community
 langchain-huggingface
-langchain-chroma
-chromadb
 sentence-transformers
 python-dotenv
 requests
@@ -21,3 +19,6 @@ httpx
 cryptography
 # Qdrant vector database
 qdrant-client
+# File upload support (FastAPI multipart) and async file I/O
+python-multipart
+aiofiles

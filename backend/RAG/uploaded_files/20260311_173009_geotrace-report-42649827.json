@@ -1,0 +1,226 @@
+{
+  "report_id": "RPT-42649827",
+  "session_id": "42649827-447f-44e9-afe6-8565e8dfafa0",
+  "generated_at": "2026-02-27T14:35:51.113900Z",
+  "status": "complete",
+  "executive_summary": "Analysis of 3 image(s) was conducted. 3 image(s) contained embedded GPS coordinates. 0 image(s) had landmarks identified via AI vision analysis. Inference methods used: gps_direct. Movement reconstruction shows 530.6 km total distance across 2 segment(s). Identified locations: Telugu Ganga Colony, Samagdripalle, Chinthakommadinne, YSR Kadapa, Andhra Pradesh, 516004, India; Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India; Sampradaya Vedika, HITEC City\u2013Kondapur Main Road, HITEC City, Ward 104 Kondapur, Hyderabad, Serilingampalle mandal, Ranga Reddy, Telangana, 500081, India.",
+  "images_analyzed": 3,
+  "images_with_gps": 3,
+  "images_with_landmarks": 0,
+  "image_analyses": [
+    {
+      "order": 1,
+      "image_id": "38055aa4-7db9-41cd-a4fd-67391117ff19",
+      "filename": "IMG_8162.HEIC",
+      "method": "gps_direct",
+      "has_gps": true,
+      "gps_latitude": 14.438572,
+      "gps_longitude": 78.825133,
+      "location_address": "Telugu Ganga Colony, Samagdripalle, Chinthakommadinne, YSR Kadapa, Andhra Pradesh, 516004, India",
+      "camera": "Apple iPhone 16",
+      "datetime": "2026-01-16T12:37:55",
+      "confidence_score": 0.95,
+      "confidence_level": "high",
+      "signals_used": [
+        "gps"
+      ],
+      "landmark_detected": null
+    },
+    {
+      "order": 2,
+      "image_id": "f66428fa-c96a-485e-a95d-2ce405032b40",
+      "filename": "IMG_8669.HEIC",
+      "method": "gps_direct",
+      "has_gps": true,
+      "gps_latitude": 13.683392,
+      "gps_longitude": 79.348367,
+      "location_address": "Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India",
+      "camera": "Apple iPhone 16",
+      "datetime": "2026-02-04T12:02:00",
+      "confidence_score": 0.95,
+      "confidence_level": "high",
+      "signals_used": [
+        "gps"
+      ],
+      "landmark_detected": null
+    },
+    {
+      "order": 3,
+      "image_id": "e9eb7967-603f-4bcd-866f-4c0042a9146d",
+      "filename": "IMG_9307.HEIC",
+      "method": "gps_direct",
+      "has_gps": true,
+      "gps_latitude": 17.451692,
+      "gps_longitude": 78.378067,
+      "location_address": "Sampradaya Vedika, HITEC City\u2013Kondapur Main Road, HITEC City, Ward 104 Kondapur, Hyderabad, Serilingampalle mandal, Ranga Reddy, Telangana, 500081, India",
+      "camera": "Apple iPhone 16",
+      "datetime": "2026-02-18T14:16:23",
+      "confidence_score": 0.95,
+      "confidence_level": "high",
+      "signals_used": [
+        "gps"
+      ],
+      "landmark_detected": null
+    }
+  ],
+  "movement_analysis": {
+    "detected": true,
+    "summary": "Movement detected across 3 location(s), covering 530.6 km.",
+    "total_distance_km": 530.64,
+    "time_span_hours": null,
+    "total_waypoints": 3,
+    "geolocated_waypoints": 3,
+    "segments_count": 2,
+    "travel_modes": []
+  },
+  "evidence_matrix": {
+    "total_images": 3,
+    "signals": {
+      "gps": {
+        "count": 3,
+        "percent": 100
+      },
+      "landmark": {
+        "count": 0,
+        "percent": 0
+      },
+      "ocr": {
+        "count": 0,
+        "percent": 0
+      },
+      "scene": {
+        "count": 0,
+        "percent": 0
+      },
+      "device": {
+        "count": 0,
+        "percent": 0
+      }
+    }
+  },
+  "confidence_assessment": {
+    "average": 0.95,
+    "min": 0.95,
+    "max": 0.95,
+    "level": "high"
+  },
+  "locations_identified": [
+    {
+      "address": "Telugu Ganga Colony, Samagdripalle, Chinthakommadinne, YSR Kadapa, Andhra Pradesh, 516004, India",
+      "city": "Samagdripalle",
+      "country": "India",
+      "latitude": 14.438572,
+      "longitude": 78.825133
+    },
+    {
+      "address": "Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India",
+      "city": "Tirumala",
+      "country": "India",
+      "latitude": 13.683392,
+      "longitude": 79.348367
+    },
+    {
+      "address": "Sampradaya Vedika, HITEC City\u2013Kondapur Main Road, HITEC City, Ward 104 Kondapur, Hyderabad, Serilingampalle mandal, Ranga Reddy, Telangana, 500081, India",
+      "city": "Hyderabad",
+      "country": "India",
+      "latitude": 17.451692,
+      "longitude": 78.378067
+    }
+  ],
+  "recommendations": [
+    "Long-distance movement detected. Cross-reference with known transit routes or flight paths."
+  ],
+  "timeline": {
+    "session_id": "42649827-447f-44e9-afe6-8565e8dfafa0",
+    "total_images": 3,
+    "waypoints": [
+      {
+        "image_id": "38055aa4-7db9-41cd-a4fd-67391117ff19",
+        "filename": "IMG_8162.HEIC",
+        "timestamp": null,
+        "latitude": 14.438572,
+        "longitude": 78.825133,
+        "location_name": "Telugu Ganga Colony, Samagdripalle, Chinthakommadinne, YSR Kadapa, Andhra Pradesh, 516004, India",
+        "confidence": 0.95,
+        "order_index": 0
+      },
+      {
+        "image_id": "f66428fa-c96a-485e-a95d-2ce405032b40",
+        "filename": "IMG_8669.HEIC",
+        "timestamp": null,
+        "latitude": 13.683392,
+        "longitude": 79.348367,
+        "location_name": "Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India",
+        "confidence": 0.95,
+        "order_index": 1
+      },
+      {
+        "image_id": "e9eb7967-603f-4bcd-866f-4c0042a9146d",
+        "filename": "IMG_9307.HEIC",
+        "timestamp": null,
+        "latitude": 17.451692,
+        "longitude": 78.378067,
+        "location_name": "Sampradaya Vedika, HITEC City\u2013Kondapur Main Road, HITEC City, Ward 104 Kondapur, Hyderabad, Serilingampalle mandal, Ranga Reddy, Telangana, 500081, India",
+        "confidence": 0.95,
+        "order_index": 2
+      }
+    ],
+    "segments": [
+      {
+        "from_waypoint": {
+          "image_id": "38055aa4-7db9-41cd-a4fd-67391117ff19",
+          "filename": "IMG_8162.HEIC",
+          "timestamp": null,
+          "latitude": 14.438572,
+          "longitude": 78.825133,
+          "location_name": "Telugu Ganga Colony, Samagdripalle, Chinthakommadinne, YSR Kadapa, Andhra Pradesh, 516004, India",
+          "confidence": 0.95,
+          "order_index": 0
+        },
+        "to_waypoint": {
+          "image_id": "f66428fa-c96a-485e-a95d-2ce405032b40",
+          "filename": "IMG_8669.HEIC",
+          "timestamp": null,
+          "latitude": 13.683392,
+          "longitude": 79.348367,
+          "location_name": "Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India",
+          "confidence": 0.95,
+          "order_index": 1
+        },
+        "distance_km": 100.87,
+        "duration_minutes": null,
+        "estimated_speed_kmh": null,
+        "travel_mode": null
+      },
+      {
+        "from_waypoint": {
+          "image_id": "f66428fa-c96a-485e-a95d-2ce405032b40",
+          "filename": "IMG_8669.HEIC",
+          "timestamp": null,
+          "latitude": 13.683392,
+          "longitude": 79.348367,
+          "location_name": "Sannidhi Street, Tirumala, Tirupati (Urban), Tirupati, Andhra Pradesh, 517504, India",
+          "confidence": 0.95,
+          "order_index": 1
+        },
+        "to_waypoint": {
+          "image_id": "e9eb7967-603f-4bcd-866f-4c0042a9146d",
+          "filename": "IMG_9307.HEIC",
+          "timestamp": null,
+          "latitude": 17.451692,
+          "longitude": 78.378067,
+          "location_name": "Sampradaya Vedika, HITEC City\u2013Kondapur Main Road, HITEC City, Ward 104 Kondapur, Hyderabad, Serilingampalle mandal, Ranga Reddy, Telangana, 500081, India",
+          "confidence": 0.95,
+          "order_index": 2
+        },
+        "distance_km": 429.77,
+        "duration_minutes": null,
+        "estimated_speed_kmh": null,
+        "travel_mode": null
+      }
+    ],
+    "total_distance_km": 530.64,
+    "time_span_hours": null,
+    "geojson": null
+  }
+}
