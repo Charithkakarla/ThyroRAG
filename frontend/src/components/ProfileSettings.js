@@ -84,8 +84,10 @@ function ProfileSettings() {
     if (!user) return;
     setProfileSaving(true);
     try {
-      const parts = profileName.trim().split(' ');
-      await user.update({ firstName: parts[0] || '', lastName: parts.slice(1).join(' ') || '' });
+      const parts = profileName.trim().split(/\s+/);
+      const firstName = parts[0] || '';
+      const lastName = parts.slice(1).join(' ');
+      await user.update({ firstName, ...(lastName ? { lastName } : {}) });
       notify('Profile name updated successfully.', 'success');
     } catch {
       notify('Failed to update profile. Please try again.', 'error');

@@ -35,6 +35,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from auth.auth_middleware import get_current_user
+from supabase_client import supabase
 from vector_db.document_ingestion import ingestion_service
 from vector_db.tika_service import extract_text as tika_extract_text
 from vector_db.vector_search import vector_search_service
@@ -394,6 +395,26 @@ async def upload_file(
         )
         warning = "OCR could not extract readable text from this file. The chatbot can reference the filename, but answers will be limited until a readable document is uploaded."
 
+    # Ensure correct MIME type (helps with WebP/AVIF if browser sends generic)
+    mime_type = file.content_type
+    if not mime_type or mime_type == "application/octet-stream":
+        from mimetypes import guess_type
+        mime_type = guess_type(original_filename)[0] or "application/octet-stream"
+
+    # Upload to Supabase Storage (duplicate also in main.py) — ensures visibility in history
+    public_file_url = None
+    try:
+        storage_path = f"reports/{safe_name}"
+        supabase.storage.from_("reports").upload(
+            path=storage_path,
+            file=content,
+            file_options={"content-type": mime_type}
+        )
+        url_res = supabase.storage.from_("reports").get_public_url(storage_path)
+        public_file_url = url_res
+    except Exception as e:
+        print(f"[RAG Routes] Supabase storage upload failed: {e}")
+
     # Ingest extracted text into Qdrant
     document_id = str(uuid.uuid4())
     try:
@@ -408,6 +429,7 @@ async def upload_file(
                 "category": "patient_upload",
                 "user_id": current_user.id,
                 "upload_timestamp": datetime.now(timezone.utc).isoformat(),
+                "file_url": public_file_url,
             },
         )
     except RuntimeError as exc:
@@ -420,6 +442,7 @@ async def upload_file(
         "document_id": document_id,
         "filename": original_filename,
         "saved_as": safe_name,
+        "file_url": public_file_url,
         "extracted_chars": len(extracted_text),
         "extracted_preview": extracted_text[:600],
         "chunks_ingested": len(chunk_ids),

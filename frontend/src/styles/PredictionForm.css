@@ -307,6 +307,92 @@
   font-size: 1.125rem;
 }
 
+/* Clinical Interpretation */
+.result-interpretation {
+  margin-top: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  background-color: #f0faf4;
+  border-left: 4px solid #2d7a4f;
+  border-radius: 0 8px 8px 0;
+}
+
+.result-interpretation h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #2d7a4f;
+  margin: 0 0 0.6rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.result-interpretation p {
+  font-size: 0.9rem;
+  color: #1e3a2a;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* Key Reasons */
+.result-key-reasons {
+  margin-top: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  background-color: #f5f8ff;
+  border-left: 4px solid #3456b4;
+  border-radius: 0 8px 8px 0;
+}
+
+.result-key-reasons h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #3456b4;
+  margin: 0 0 0.75rem 0;
+}
+
+.result-key-reasons ul {
+  margin: 0;
+  padding-left: 1.4rem;
+}
+
+.result-key-reasons ul li {
+  font-size: 0.875rem;
+  color: #1a2747;
+  line-height: 1.6;
+  margin-bottom: 0.3rem;
+}
+
+/* Download PDF button */
+.result-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+.btn-download-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.4rem;
+  background: linear-gradient(135deg, #2c7a4f, #3aaa6a);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(44, 122, 79, 0.35);
+}
+
+.btn-download-pdf:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-download-pdf:active {
+  transform: translateY(0);
+}
+
 /* Responsive Styles */
 @media (max-width: 768px) {
   .form-section {
@@ -393,28 +479,39 @@
   cursor: not-allowed;
 }
 
-/* Upload feedback banner */
+/* Upload feedback — fixed toast in top-right corner */
 .upload-msg {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 9999;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.6rem;
-  padding: 0.7rem 2.5rem;
+  padding: 0.85rem 1.1rem 0.85rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
-  border-bottom: 1px solid transparent;
-  position: relative;
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.13);
+  max-width: 380px;
+  animation: toastIn 0.25s ease;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .upload-msg-success {
   background: #f0fdf4;
   color: #15803d;
-  border-color: #bbf7d0;
+  border: 1.5px solid #bbf7d0;
 }
 
 .upload-msg-error {
   background: #fef2f2;
   color: #b91c1c;
-  border-color: #fecaca;
+  border: 1.5px solid #fecaca;
 }
 
 .upload-msg-close {
@@ -426,7 +523,8 @@
   color: inherit;
   opacity: 0.6;
   line-height: 1;
-  padding: 0 0.25rem;
+  padding: 0 0 0 0.5rem;
+  flex-shrink: 0;
 }
 
 .upload-msg-close:hover {

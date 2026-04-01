@@ -1,4 +1,4 @@
-import { Brain, User } from 'lucide-react';
+import { Bot, UserCircle2 } from 'lucide-react';
 import '../styles/Chatbot.css';
 
 /**
@@ -44,6 +44,10 @@ function MessageBubble({ message, sender, timestamp }) {
 
   return (
     <div className={`message-bubble ${sender}`}>
+      {/* Avatar always rendered first in DOM; CSS flex-direction controls visual order */}
+      <div className={`message-avatar message-avatar--${sender}`}>
+        {sender === 'ai' ? <Bot size={22} /> : <UserCircle2 size={22} />}
+      </div>
       <div className="message-content">
         <div className="formatted-message">
           {formatMessage(message)}
@@ -56,9 +60,6 @@ function MessageBubble({ message, sender, timestamp }) {
             })}
           </span>
         )}
-      </div>
-      <div className="message-avatar">
-        {sender === 'ai' ? <Brain size={20} /> : <User size={20} />}
       </div>
     </div>
   );

@@ -158,6 +158,79 @@ body {
   box-shadow: var(--shadow);
 }
 
+/* ── Sign-In Gate (locked tab overlay) ── */
+.signin-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+.signin-gate-card {
+  background: var(--background);
+  border: 2px solid var(--primary-200);
+  border-radius: 20px;
+  padding: 3rem 2.5rem;
+  text-align: center;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+}
+
+.signin-gate-icon {
+  font-size: 3rem;
+  color: var(--primary-400);
+  margin-bottom: 1rem;
+}
+
+.signin-gate-card h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--olive-900);
+  margin: 0 0 0.75rem;
+}
+
+.signin-gate-card p {
+  color: var(--text-light);
+  font-size: 0.95rem;
+  margin: 0 0 2rem;
+  line-height: 1.6;
+}
+
+.signin-gate-btns {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.signin-gate-btn-primary {
+  background: var(--primary-600);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.signin-gate-btn-primary:hover { background: var(--primary-700); }
+
+.signin-gate-btn-outline {
+  background: transparent;
+  color: var(--primary-600);
+  border: 2px solid var(--primary-500);
+  border-radius: 8px;
+  padding: 0.68rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.signin-gate-btn-outline:hover { background: var(--primary-50); }
+
 .chatbot-section-wrapper {
   padding: 1rem 0;
   display: flex;

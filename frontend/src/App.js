@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useUser, useAuth as useClerkAuth, SignIn, SignUp } from '@clerk/react';
 import PredictionForm from './components/PredictionForm';
 import Chatbot from './components/Chatbot';
 import PatientHistory from './components/PatientHistory';
+import Analytics from './components/Analytics';
 import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
 import Sidebar from './components/Sidebar';
+import LandingPage from './components/LandingPage';
+import { NotificationProvider } from './context/NotificationContext';
 import { supabase } from './supabase/supabaseClient';
 import { setTokenGetter } from './services/api';
+import {
+  getPatientDisplayName,
+  loadPatientRecords,
+} from './utils/patientRecords';
 import './styles/App.css';
 
 /**
@@ -20,7 +27,9 @@ function App() {
   const { user, isLoaded, isSignedIn } = useUser();
   const { signOut, getToken } = useClerkAuth();
   const [activeTab, setActiveTab] = useState('prediction');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [patientRecords, setPatientRecords] = useState([]);
+  const [updateCounter, setUpdateCounter] = useState(0); // Force re-renders
 
   // Wire the Clerk token into the API service layer
   useEffect(() => {
@@ -48,42 +57,48 @@ function App() {
     upsertProfile();
   }, [isSignedIn, user]);
 
+  // This useEffect now depends on `updateCounter` to force a reload
+  useEffect(() => {
+    if (!isSignedIn || !user) {
+      setPatientRecords([]);
+      return;
+    }
+    // Fetch predictions from Supabase
+    loadPatientRecords(user).then((records) => {
+      setPatientRecords(records);
+    });
+  }, [isSignedIn, user, updateCounter]);
+
   const handleLogout = async () => {
     await signOut();
     setActiveTab('prediction');
   };
 
+  // This function now just triggers the useEffect hook above
+  const handleAddPatientRecord = () => {
+    setUpdateCounter(c => c + 1);
+  };
+
   const toggleSidebar = () => setIsSidebarCollapsed(c => !c);
 
-  if (!isLoaded) {
-    return <div className="loading-screen">Loading...</div>;
-  }
+  const patientName = getPatientDisplayName({ fullName: user?.fullName });
 
-  // Unauthenticated: show Clerk-hosted Sign In / Sign Up
-  if (!isSignedIn) {
-    return (
-      <Routes>
-        <Route
-          path="/sign-up/*"
-          element={
-            <div className="clerk-auth-page">
-              <SignUp routing="path" path="/sign-up" afterSignUpUrl="/" />
-            </div>
-          }
-        />
-        <Route
-          path="/*"
-          element={
-            <div className="clerk-auth-page">
-              <SignIn routing="path" path="/" afterSignInUrl="/" />
-            </div>
-          }
-        />
-      </Routes>
-    );
-  }
+  // Gate component for tabs that require sign-in (used in renderContent)
+  const SignInGate = ({ title }) => (
+    <div className="signin-gate">
+      <div className="signin-gate-card">
+        <i className='bx bx-lock-alt signin-gate-icon'></i>
+        <h2>{title}</h2>
+        <p>Sign in to access this feature and save your results securely.</p>
+        <div className="signin-gate-btns">
+          <button className="signin-gate-btn-primary" onClick={() => window.location.href = '/sign-in'}>Sign In</button>
+          <button className="signin-gate-btn-outline" onClick={() => window.location.href = '/sign-up'}>Create Account</button>
+        </div>
+      </div>
+    </div>
+  );
 
-  const renderContent = () => {
+  const renderContent = (signedIn = true) => {
     switch (activeTab) {
       case 'prediction':
         return (
@@ -94,11 +109,14 @@ function App() {
             <p className="section-description">
               Enter your medical data below to get an AI-powered prediction about your thyroid health.
             </p>
-            <PredictionForm />
+            <PredictionForm
+              defaultPatientName={patientName}
+              onHistoryRecordCreated={handleAddPatientRecord}
+            />
           </div>
         );
       case 'chatbot':
-        return <Chatbot />;
+        return <Chatbot isGuest={!signedIn} />;
       case 'history':
         return (
           <div className="section-container">
@@ -106,9 +124,29 @@ function App() {
               <i className='bx bx-history'></i> Patient Records
             </h2>
             <p className="section-description">
-              View patient medical history and past thyroid screening results.
+              Review static and uploaded thyroid hormone records for {patientName}.
             </p>
-            <PatientHistory />
+            {signedIn ? (
+              <PatientHistory user={user} records={patientRecords} />
+            ) : (
+              <SignInGate title="Sign in to view patient history" />
+            )}
+          </div>
+        );
+      case 'analytics':
+        return (
+          <div className="section-container">
+            <h2 className="section-title">
+              <i className='bx bx-line-chart'></i> Analytics
+            </h2>
+            <p className="section-description">
+              Track hormone trends, compare the latest report, and review the latest TSH status.
+            </p>
+            {signedIn ? (
+              <Analytics user={user} records={patientRecords} />
+            ) : (
+              <SignInGate title="Sign in to view analytics" />
+            )}
           </div>
         );
       case 'about':
@@ -162,31 +200,87 @@ function App() {
     }
   };
 
+  if (!isLoaded) {
+    return <div className="loading-screen">Loading...</div>;
+  }
+
+  // Unauthenticated: landing page at /, Clerk forms at /sign-in and /sign-up
+  // /app is accessible without sign-in (chatbot with 3-query limit; other tabs prompt login)
+  if (!isSignedIn) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/sign-up/*"
+          element={
+            <div className="clerk-auth-page">
+              <SignUp routing="path" path="/sign-up" afterSignUpUrl="/app" />
+            </div>
+          }
+        />
+        <Route
+          path="/sign-in/*"
+          element={
+            <div className="clerk-auth-page">
+              <SignIn routing="path" path="/sign-in" afterSignInUrl="/app" />
+            </div>
+          }
+        />
+        {/* /app is publicly accessible — chatbot free, other tabs prompt sign-in */}
+        <Route
+          path="/app/*"
+          element={
+            <div className="App">
+              <Sidebar
+                isCollapsed={isSidebarCollapsed}
+                toggleSidebar={toggleSidebar}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                user={null}
+                onLogout={null}
+                isGuest
+              />
+              <main className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+                {renderContent(false)}
+              </main>
+            </div>
+          }
+        />
+        {/* Any other path → landing page */}
+        <Route path="/*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
   return (
-    <Routes>
-      <Route
-        path="/*"
-        element={
-          <div className="App">
-            <Sidebar
-              isCollapsed={isSidebarCollapsed}
-              toggleSidebar={toggleSidebar}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              user={{
-                username: user.primaryEmailAddress?.emailAddress ?? '',
-                fullName: user.fullName || user.primaryEmailAddress?.emailAddress || 'User',
-                role: 'Patient',
-              }}
-              onLogout={handleLogout}
-            />
-            <main className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-              {renderContent()}
-            </main>
-          </div>
-        }
-      />
-    </Routes>
+    <NotificationProvider>
+      <Routes>
+        {/* Signed-in users: always show landing page at / — user must click "Go to App" */}
+        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/*"
+          element={
+            <div className="App">
+              <Sidebar
+                isCollapsed={isSidebarCollapsed}
+                toggleSidebar={toggleSidebar}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                user={{
+                  username: user.primaryEmailAddress?.emailAddress ?? '',
+                  fullName: user.fullName || user.primaryEmailAddress?.emailAddress || 'User',
+                  role: 'Patient',
+                }}
+                onLogout={handleLogout}
+              />
+              <main className={`main-content ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+                {renderContent(true)}
+              </main>
+            </div>
+          }
+        />
+      </Routes>
+    </NotificationProvider>
   );
 }
 

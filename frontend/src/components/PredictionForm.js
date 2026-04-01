@@ -8,20 +8,40 @@ import {
   PieChart,
   Info,
   Upload,
-  CheckCircle2
+  FileDown
 } from 'lucide-react';
-import { predictThyroidDisease, parseUploadedFile } from '../services/api';
+import { predictThyroidDisease, parseUploadedFile, storeReportFile } from '../services/api';
+import { generatePDF } from '../utils/generatePDF';
+import { useNotification } from '../context/NotificationContext';
 import '../styles/PredictionForm.css';
+
+function extractHistoryValues(fields) {
+  const tsh = fields.TSH ?? fields.tsh;
+  const freeT3 = fields.freeT3 ?? fields.free_t3 ?? fields.FT3 ?? fields.ft3 ?? fields.T3 ?? fields.t3;
+  const freeT4 = fields.freeT4 ?? fields.free_t4 ?? fields.FT4 ?? fields.ft4 ?? fields.TT4 ?? fields.tt4;
+
+  if (tsh == null && freeT3 == null && freeT4 == null) {
+    return null;
+  }
+
+  return {
+    tsh,
+    freeT3,
+    freeT4,
+  };
+}
 
 /**
  * PredictionForm Component
  * Collects user input for thyroid-related medical data
  * Sends data to FastAPI backend and displays prediction results
  */
-function PredictionForm() {
+function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
+  const { showSuccess, showError } = useNotification();
+  
   // Form data state - matches features from thyroid dataset
   const [formData, setFormData] = useState({
-    fullName: '',
+    fullName: defaultPatientName,
     dob: '',
     age: '',
     weight: '',
@@ -60,7 +80,17 @@ function PredictionForm() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState(null); // { type: 'success'|'error', text }
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [uploadedReportMeta, setUploadedReportMeta] = useState(null); // { file_url, filename, filetype }
+
+  const handleDownloadPDF = async () => {
+    setPdfLoading(true);
+    try {
+      await generatePDF(result, formData);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
   const fileInputRef = useRef(null);
 
   /**
@@ -71,17 +101,48 @@ function PredictionForm() {
     const file = e.target.files[0];
     if (!file) return;
     setUploading(true);
-    setUploadMsg(null);
     try {
-      const data = await parseUploadedFile(file);
+      // Parse file fields AND upload to Supabase Storage simultaneously
+      const [data, storedReport] = await Promise.all([
+        parseUploadedFile(file),
+        storeReportFile(file),
+      ]);
+
       const fields = data.fields || {};
-      setFormData(prev => ({ ...prev, ...fields }));
-      setUploadMsg({ type: 'success', text: `Loaded data from "${file.name}" — ${Object.keys(fields).length} fields auto-filled.` });
+      const fieldCount = Object.keys(fields).length;
+      const extractedReportDate = fields.report_date || fields.reportDate || null;
+      const { report_date, reportDate, ...formFields } = fields;
+
+      if (fieldCount > 0) {
+        setFormData(prev => ({ ...prev, fullName: prev.fullName || defaultPatientName, ...formFields }));
+      }
+
+      // Store the uploaded file metadata for attaching to the prediction
+      if (storedReport?.file_url) {
+        setUploadedReportMeta(storedReport);
+      }
+
+      const extractedHistoryValues = extractHistoryValues(formFields);
+      if (onHistoryRecordCreated) {
+        onHistoryRecordCreated({
+          date: extractedReportDate || new Date().toISOString().slice(0, 10),
+          created_at: new Date().toISOString(),
+          tsh: extractedHistoryValues?.tsh ?? null,
+          freeT3: extractedHistoryValues?.freeT3 ?? null,
+          freeT4: extractedHistoryValues?.freeT4 ?? null,
+          source: extractedHistoryValues ? 'report-upload' : 'report-upload-partial',
+        });
+      }
+
+      if (data.status === 'partial' || fieldCount === 0) {
+        showSuccess(`File "${file.name}" uploaded and indexed. No lab values detected.`);
+      } else {
+        showSuccess(`Successfully loaded "${file.name}" with ${fieldCount} fields!`);
+      }
     } catch (err) {
-      setUploadMsg({ type: 'error', text: err.message || 'Failed to parse file.' });
+      showError(`Failed to upload file: ${err.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
-      // Reset input so the same file can be re-uploaded
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -117,7 +178,8 @@ function PredictionForm() {
         // Include patient identity so backend can store & index them
         full_name: fullName,
         dob: dob,
-        age: parseFloat(formData.age),
+        age: formData.age ? parseFloat(formData.age) : null,
+        weight: formData.weight ? parseFloat(formData.weight) : null,
         TSH: formData.TSH ? parseFloat(formData.TSH) : null,
         T3: formData.T3 ? parseFloat(formData.T3) : null,
         TT4: formData.TT4 ? parseFloat(formData.TT4) : null,
@@ -126,9 +188,23 @@ function PredictionForm() {
         TBG: formData.TBG ? parseFloat(formData.TBG) : null
       };
 
+      // Include uploaded report metadata if available
+      if (uploadedReportMeta?.file_url) {
+        processedData.report_file_url = uploadedReportMeta.file_url;
+        processedData.report_filename = uploadedReportMeta.filename;
+        processedData.report_filetype = uploadedReportMeta.filetype;
+      }
+
       // Call API
       const response = await predictThyroidDisease(processedData);
       setResult(response);
+      setUploadedReportMeta(null); // clear after use
+
+      // Show success message & refresh history after a short delay to let DB write complete
+      if (onHistoryRecordCreated) {
+        showSuccess('✅ Prediction saved! Your Patient History & Analytics have been updated.');
+        setTimeout(() => onHistoryRecordCreated(), 700);
+      }
     } catch (err) {
       setError(err.message || 'Failed to get prediction. Please check your input and try again.');
     } finally {
@@ -141,7 +217,7 @@ function PredictionForm() {
    */
   const handleReset = () => {
     setFormData({
-      fullName: '',
+    fullName: defaultPatientName,
       dob: '',
       age: '',
       weight: '',
@@ -178,6 +254,10 @@ function PredictionForm() {
     setError(null);
   };
 
+  React.useEffect(() => {
+    setFormData((prev) => ({ ...prev, fullName: prev.fullName || defaultPatientName }));
+  }, [defaultPatientName]);
+
   return (
     <div className="prediction-form-container">
       {/* ── Top-right file upload button ─────────────────────────── */}
@@ -190,7 +270,7 @@ function PredictionForm() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json"
+            accept="*/*"
             id="patient-file-input"
             style={{ display: 'none' }}
             onChange={handleFileUpload}
@@ -200,7 +280,7 @@ function PredictionForm() {
             className="upload-file-btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            title="Upload a CSV or JSON file to auto-fill the form"
+            title="Upload any medical report (PDF, image, CSV, JSON, DOCX, AVIF…) to auto-fill available fields"
           >
             {uploading
               ? <Loader2 size={16} className="animate-spin" />
@@ -209,17 +289,6 @@ function PredictionForm() {
           </button>
         </div>
       </div>
-
-      {/* Upload feedback banner */}
-      {uploadMsg && (
-        <div className={`upload-msg upload-msg-${uploadMsg.type}`}>
-          {uploadMsg.type === 'success'
-            ? <CheckCircle2 size={16} />
-            : <AlertCircle size={16} />}
-          <span>{uploadMsg.text}</span>
-          <button className="upload-msg-close" onClick={() => setUploadMsg(null)}>×</button>
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="prediction-form">
 
@@ -251,46 +320,43 @@ function PredictionForm() {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="age">Age *</label>
+              <label htmlFor="age">Age</label>
               <input
                 type="number"
                 id="age"
                 name="age"
                 value={formData.age}
                 onChange={handleChange}
-                required
                 min="0"
                 max="120"
-                placeholder="Enter age"
+                placeholder="Enter age (optional)"
               />
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="sex">Sex *</label>
+              <label htmlFor="sex">Sex</label>
               <select
                 id="sex"
                 name="sex"
                 value={formData.sex}
                 onChange={handleChange}
-                required
               >
                 <option value="F">Female</option>
                 <option value="M">Male</option>
               </select>
             </div>
             <div className="form-group">
-              <label htmlFor="weight">Weight (kg) *</label>
+              <label htmlFor="weight">Weight (kg)</label>
               <input
                 type="number"
                 id="weight"
                 name="weight"
                 value={formData.weight}
                 onChange={handleChange}
-                required
                 min="0"
                 step="0.1"
-                placeholder="Enter weight in kg"
+                placeholder="Enter weight in kg (optional)"
               />
             </div>
           </div>
@@ -401,6 +467,20 @@ function PredictionForm() {
               <label>
                 <input
                   type="checkbox"
+                  name="query_on_thyroxine"
+                  checked={formData.query_on_thyroxine === 'Yes'}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    query_on_thyroxine: e.target.checked ? 'Yes' : 'No'
+                  }))}
+                />
+                Suspected On Thyroxine
+              </label>
+            </div>
+            <div className="checkbox-item">
+              <label>
+                <input
+                  type="checkbox"
                   name="on_antithyroid_medication"
                   checked={formData.on_antithyroid_medication === 'Yes'}
                   onChange={(e) => setFormData(prev => ({
@@ -437,6 +517,34 @@ function PredictionForm() {
                   }))}
                 />
                 I131 Treatment
+              </label>
+            </div>
+            <div className="checkbox-item">
+              <label>
+                <input
+                  type="checkbox"
+                  name="query_hypothyroid"
+                  checked={formData.query_hypothyroid === 'Yes'}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    query_hypothyroid: e.target.checked ? 'Yes' : 'No'
+                  }))}
+                />
+                Hypothyroid Symptoms
+              </label>
+            </div>
+            <div className="checkbox-item">
+              <label>
+                <input
+                  type="checkbox"
+                  name="query_hyperthyroid"
+                  checked={formData.query_hyperthyroid === 'Yes'}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    query_hyperthyroid: e.target.checked ? 'Yes' : 'No'
+                  }))}
+                />
+                Hyperthyroid Symptoms
               </label>
             </div>
             <div className="checkbox-item">
@@ -507,6 +615,20 @@ function PredictionForm() {
                   }))}
                 />
                 Taking Lithium
+              </label>
+            </div>
+            <div className="checkbox-item">
+              <label>
+                <input
+                  type="checkbox"
+                  name="hypopituitary"
+                  checked={formData.hypopituitary === 'Yes'}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    hypopituitary: e.target.checked ? 'Yes' : 'No'
+                  }))}
+                />
+                Hypopituitary History
               </label>
             </div>
             <div className="checkbox-item">
@@ -586,10 +708,35 @@ function PredictionForm() {
                 ))}
               </div>
             )}
+            {result.clinical_interpretation && (
+              <div className="result-interpretation">
+                <h4><Info size={18} /> Clinical Interpretation</h4>
+                <p>{result.clinical_interpretation}</p>
+              </div>
+            )}
+            {result.key_reasons && result.key_reasons.length > 0 && (
+              <div className="result-key-reasons">
+                <h4>Key Factors Influencing This Prediction:</h4>
+                <ul>
+                  {result.key_reasons.map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
           <p className="result-disclaimer">
             <Info size={18} /> This is an AI prediction for educational purposes. Please consult a healthcare professional for proper diagnosis.
           </p>
+          <div className="result-actions">
+            <button
+              className="btn-download-pdf"
+              onClick={handleDownloadPDF}
+              disabled={pdfLoading}
+            >
+              {pdfLoading
+                ? <><Loader2 size={18} className="animate-spin" /> Generating Report…</>
+                : <><FileDown size={18} /> Download Full Report (PDF)</>}
+            </button>
+          </div>
         </div>
       )}
     </div>

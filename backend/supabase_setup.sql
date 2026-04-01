@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- ThyroRAG · Supabase Complete Schema
 -- Run in: Supabase Dashboard → SQL Editor → New Query
 -- ============================================================
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS predictions (
   prob_negative    FLOAT,
   prob_hypothyroid FLOAT,
   prob_hyperthyroid FLOAT,
+  source           TEXT DEFAULT 'manual_entry',
   notes            TEXT,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
@@ -151,3 +152,12 @@ DROP TRIGGER IF EXISTS set_profiles_updated_at ON profiles;
 CREATE TRIGGER set_profiles_updated_at
   BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ── 7. INCREMENTAL UPDATES (Run if already have the tables) ──
+-- Ensure source column exists on predictions
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='predictions' AND column_name='source') THEN
+    ALTER TABLE predictions ADD COLUMN source TEXT DEFAULT 'manual_entry';
+  END IF;
+END $$;

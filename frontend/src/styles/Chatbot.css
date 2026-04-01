@@ -47,7 +47,7 @@
 /* AI Messages (left side) */
 .message-bubble.ai {
   align-self: flex-start;
-  flex-direction: row;
+  flex-direction: row;          /* avatar left, content right */
 }
 
 .message-bubble.ai .message-content {
@@ -60,7 +60,7 @@
 /* User Messages (right side) */
 .message-bubble.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row-reverse;  /* avatar right, content left */
 }
 
 .message-bubble.user .message-content {
@@ -92,22 +92,29 @@
   opacity: 0.7;
 }
 
-/* Message Avatar */
+/* Message Avatars */
 .message-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
   flex-shrink: 0;
-  background-color: var(--primary-50);
-  border: 2px solid var(--primary-500);
 }
 
-.message-bubble.user .message-avatar {
-  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%);
+/* AI avatar — left side: olive/primary tinted circle with Bot icon */
+.message-avatar--ai {
+  background: linear-gradient(135deg, var(--primary-50) 0%, var(--primary-100) 100%);
+  border: 2px solid var(--primary-500);
+  color: var(--primary-600);
+}
+
+/* User avatar — right side: solid olive/green circle with UserCircle icon */
+.message-avatar--user {
+  background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700, #3a5a28) 100%);
+  border: 2px solid var(--primary-600);
+  color: #ffffff;
 }
 
 /* Typing Indicator */
@@ -339,6 +346,84 @@
   font-size: 1.3rem;
 }
 
+/* Voice Button Styles */
+.voice-button {
+  padding: 0.75rem 1.25rem;
+  background: var(--primary-500);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 1.3rem;
+  transition: all 0.3s ease;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+}
+
+.voice-button:hover:not(:disabled) {
+  background: var(--primary-600);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.voice-button:disabled {
+  background: var(--border-color);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.voice-button.recording {
+  background: #ef4444;
+  animation: pulse-bg 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-bg {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.voice-button i {
+  font-size: 1.3rem;
+}
+
+/* Voice Error Message */
+.voice-error-message {
+  padding: 0.75rem 1rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .chatbot-container {
@@ -417,3 +502,326 @@
 .chat-messages {
   scroll-behavior: smooth;
 }
+
+/* Upload button – active state while uploading */
+.upload-btn.uploading {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Upload progress bar (appears between upload btn and chat form) */
+.upload-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--background-alt);
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-dark);
+  min-width: 0;
+  max-width: 260px;
+  flex-shrink: 0;
+}
+
+/* Upload status pill — appears inside the input form row, left of the textarea */
+.upload-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: var(--primary-50);
+  border: 1.5px solid var(--primary-300, #b5c786);
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--primary-700, #3a5a28);
+  white-space: nowrap;
+  max-width: 200px;
+  flex-shrink: 0;
+  height: 32px;
+}
+
+.upload-filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.upload-track {
+  width: 50px;
+  height: 5px;
+  background-color: var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.upload-fill {
+  height: 100%;
+  background-color: var(--primary-500);
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.upload-done {
+  color: #16a34a;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.upload-err {
+  color: var(--error-color, #dc2626);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Guest query banner ── */
+.guest-query-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: var(--primary-50, #f5f7ee);
+  border-bottom: 1px solid var(--primary-200, #d4dba8);
+  padding: 0.55rem 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-dark);
+  flex-shrink: 0;
+}
+
+.guest-query-banner span { flex: 1; }
+
+.guest-signin-link {
+  background: none;
+  border: none;
+  color: var(--primary-600, #6b7e2a);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.guest-signin-link:hover { opacity: 0.75; }
+
+/* ── Sign-in modal (ChatGPT style) ── */
+.signin-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  border-radius: 12px;
+}
+
+.signin-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  max-width: 380px;
+  width: 88%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.signin-modal-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+}
+
+.signin-modal-close:hover { color: #333; }
+
+.signin-modal-icon {
+  font-size: 2.8rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.signin-modal-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0 0 0.65rem;
+}
+
+.signin-modal-desc {
+  color: #666;
+  font-size: 0.92rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+.signin-modal-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.signin-modal-primary {
+  background: var(--primary-600, #6b7e2a);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.signin-modal-primary:hover { background: var(--primary-700, #556318); }
+
+.signin-modal-outline {
+  background: transparent;
+  color: var(--primary-600, #6b7e2a);
+  border: 2px solid var(--primary-500, #7d9432);
+  border-radius: 8px;
+  padding: 0.72rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.signin-modal-outline:hover { background: var(--primary-50, #f5f7ee); }
+
+.signin-modal-note {
+  font-size: 0.78rem;
+  color: #aaa;
+  margin: 0;
+}
+
+/* ── GPT-style login modal ── */
+.gpt-modal {
+  background: #2f2f2f;
+  border-radius: 16px;
+  padding: 2.25rem 2rem 1.5rem;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  position: relative;
+  color: #fff;
+}
+
+.gpt-modal-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #888;
+  padding: 0;
+}
+.gpt-modal-close:hover { color: #fff; }
+
+.gpt-modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 0.6rem;
+}
+
+.gpt-modal-sub {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin: 0 0 1.5rem;
+  line-height: 1.5;
+}
+
+.gpt-modal-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.gpt-social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  background: #3d3d3d;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 50px;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.gpt-social-btn:hover { background: #4a4a4a; }
+
+.gpt-modal-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #666;
+  font-size: 0.8rem;
+  margin: 0.75rem 0;
+}
+.gpt-modal-divider::before,
+.gpt-modal-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #444;
+}
+
+.gpt-email-input {
+  width: 100%;
+  background: #3d3d3d;
+  border: 1px solid #555;
+  border-radius: 50px;
+  color: #fff;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.25rem;
+  box-sizing: border-box;
+  outline: none;
+  margin-bottom: 0.65rem;
+}
+.gpt-email-input::placeholder { color: #888; }
+.gpt-email-input:focus { border-color: #888; }
+
+.gpt-continue-btn {
+  width: 100%;
+  background: #fff;
+  color: #111;
+  border: none;
+  border-radius: 50px;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: background 0.2s;
+}
+.gpt-continue-btn:hover { background: #e8e8e8; }
+
+.gpt-modal-note {
+  font-size: 0.75rem;
+  color: #666;
+  line-height: 1.5;
+  margin: 0;
+}
+.gpt-modal-note a { color: #888; text-decoration: underline; }
