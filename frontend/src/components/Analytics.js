@@ -1,17 +1,18 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   BarChart,
   Bar,
   Cell,
 } from 'recharts';
-import { Activity, Beaker, FileText, Sparkles, TrendingUp } from 'lucide-react';
+import { Activity, BarChart3, Sparkles } from 'lucide-react';
 import {
   REFERENCE_RANGES,
   buildAnalyticsChartData,
@@ -20,27 +21,8 @@ import {
 } from '../utils/patientRecords';
 import '../styles/Analytics.css';
 
-// Custom Tooltip for Recharts
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="glass-tooltip">
-        <p className="tooltip-label">{label}</p>
-        {payload.map((entry, index) => (
-          <div key={index} className="tooltip-row">
-            <span className="tooltip-dot" style={{ backgroundColor: entry.color }}></span>
-            <span className="tooltip-name">{entry.name}:</span>
-            <span className="tooltip-value" style={{ color: entry.color }}>{entry.value}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
-
 function Analytics({ user, records }) {
-  const patientName = user?.fullName ?? 'Patient';
+  const patientName = user?.fullName ?? 'the user';
   const hasNumericValue = (value) => value != null && !Number.isNaN(Number(value));
   const hasAnyLabValues = (record) =>
     [record?.tsh, record?.freeT3, record?.freeT4].some((value) => hasNumericValue(value));
@@ -53,8 +35,11 @@ function Analytics({ user, records }) {
     }))
     .filter((point) => !Number.isNaN(point.timestamp));
 
-  const monthlyChartData = useMemo(() => {
-    if (!chartDataWithTimestamp.length) return [];
+  const monthlyChartData = React.useMemo(() => {
+    if (!chartDataWithTimestamp.length) {
+      return [];
+    }
+
     const hasLabValues = (point) =>
       [point.TSH, point['Free T3'], point['Free T4']].some((value) => hasNumericValue(value));
 
@@ -64,7 +49,9 @@ function Analytics({ user, records }) {
       const monthKey = `${pointDate.getFullYear()}-${String(pointDate.getMonth() + 1).padStart(2, '0')}`;
       const existing = monthlyBuckets.get(monthKey);
 
-      if (!hasLabValues(point)) return;
+      if (!hasLabValues(point)) {
+        return;
+      }
 
       if (!existing || point.timestamp > existing.timestamp) {
         monthlyBuckets.set(monthKey, point);
@@ -79,158 +66,161 @@ function Analytics({ user, records }) {
       }));
   }, [chartDataWithTimestamp]);
 
-  const latestRecord = [...records]
-    .filter((record) => hasAnyLabValues(record))
-    .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())[0] || null;
-
-  const getLatestStr = (field) => {
-    const rec = [...records].filter(r => hasNumericValue(r?.[field]))
-      .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())[0];
-    return rec ? Number(rec[field]) : null;
+  const formatTooltipLabel = (_, payload) => {
+    const point = payload?.[0]?.payload;
+    return point ? `${point.monthLabel} (${point.date})` : '';
   };
 
-  const latestTshValue = getLatestStr('tsh');
-  const latestT3Value = getLatestStr('freeT3');
-  const latestT4Value = getLatestStr('freeT4');
+  const latestRecord = [...records]
+    .filter((record) => hasAnyLabValues(record))
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at || a.date).getTime();
+      const bTime = new Date(b.created_at || b.date).getTime();
+      return bTime - aTime;
+    })[0] || null;
+
+  const latestTshRecord = [...records]
+    .filter((record) => hasNumericValue(record?.tsh))
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at || a.date).getTime();
+      const bTime = new Date(b.created_at || b.date).getTime();
+      return bTime - aTime;
+    })[0] || null;
+
+  const latestFreeT3Record = [...records]
+    .filter((record) => hasNumericValue(record?.freeT3))
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at || a.date).getTime();
+      const bTime = new Date(b.created_at || b.date).getTime();
+      return bTime - aTime;
+    })[0] || null;
+
+  const latestFreeT4Record = [...records]
+    .filter((record) => hasNumericValue(record?.freeT4))
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at || a.date).getTime();
+      const bTime = new Date(b.created_at || b.date).getTime();
+      return bTime - aTime;
+    })[0] || null;
 
   const latestComparison = [
-    { name: 'TSH', value: latestTshValue || 0, rawValue: latestTshValue, fill: '#8B9E57' },
-    { name: 'Free T3', value: latestT3Value || 0, rawValue: latestT3Value, fill: '#3B82F6' },
-    { name: 'Free T4', value: latestT4Value || 0, rawValue: latestT4Value, fill: '#F59E0B' },
+    {
+      name: 'TSH',
+      value: hasNumericValue(latestTshRecord?.tsh) ? Number(latestTshRecord.tsh) : 0,
+      rawValue: latestTshRecord?.tsh,
+      fill: '#7D9645',
+    },
+    {
+      name: 'Free T3',
+      value: hasNumericValue(latestFreeT3Record?.freeT3) ? Number(latestFreeT3Record.freeT3) : 0,
+      rawValue: latestFreeT3Record?.freeT3,
+      fill: '#3B82F6',
+    },
+    {
+      name: 'Free T4',
+      value: hasNumericValue(latestFreeT4Record?.freeT4) ? Number(latestFreeT4Record.freeT4) : 0,
+      rawValue: latestFreeT4Record?.freeT4,
+      fill: '#F59E0B',
+    },
   ];
 
   const latestTshStatus = latestRecord
     ? getHormoneStatus(latestRecord.tsh, REFERENCE_RANGES.tsh.low, REFERENCE_RANGES.tsh.high)
     : 'Unknown';
 
-  const totalRecordsCount = records.length;
-  const abnormalCount = records.filter(r => r.prediction && r.prediction !== '0' && r.prediction.toLowerCase() !== 'negative').length;
-
   return (
-    <div className="dash-analytics-wrapper">
-      
-      {/* Top Welcome / Header */}
-      <header className="dash-header glass-card">
-        <div className="dh-left">
-          <h2>Health Analytics for <span>{patientName}</span></h2>
-          <p>Real-time machine learning insights & hormone trends</p>
+    <div className="analytics-page">
+      <div className="analytics-hero">
+        <div>
+          <span className="analytics-kicker">Patient Name</span>
+          <h2>{patientName}</h2>
+          <p>Hormone analytics updates automatically when new lab reports are uploaded.</p>
         </div>
-        <div className="dh-right">
-          <div className={`status-pill pill-${latestTshStatus.toLowerCase()}`}>
-            <Activity size={18} />
-            TSH Status: <strong>{latestTshStatus}</strong>
-          </div>
+        <div className={`status-chip status-chip-${latestTshStatus.toLowerCase()}`}>
+          <Activity size={18} /> Latest TSH: {latestTshStatus}
         </div>
-      </header>
+      </div>
 
-      {/* Hero KPIS */}
-      <section className="kpi-grid">
-        <div className="kpi-card glass-card">
-          <div className="kpi-icon-wrap bg-olive">
-            <FileText size={24} />
-          </div>
-          <div className="kpi-data">
-            <p>Total Records</p>
-            <h3>{totalRecordsCount}</h3>
-          </div>
+      <div className="analytics-card">
+        <div className="analytics-card-head">
+          <h3><Activity size={18} /> Hormone Trend Line Chart</h3>
+          <span>TSH, Free T3 and Free T4 over time</span>
         </div>
-        <div className="kpi-card glass-card">
-          <div className="kpi-icon-wrap bg-blue">
-            <Beaker size={24} />
-          </div>
-          <div className="kpi-data">
-            <p>Latest TSH</p>
-            <h3>{latestTshValue !== null ? `${latestTshValue} mIU/L` : 'N/A'}</h3>
-          </div>
+        <div className="analytics-chart-shell">
+          {monthlyChartData.length ? (
+            <ResponsiveContainer width="100%" height={340}>
+              <LineChart data={monthlyChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#D7DAC8" />
+                <XAxis dataKey="monthLabel" stroke="#555841" />
+                <YAxis stroke="#555841" />
+                <Tooltip labelFormatter={formatTooltipLabel} />
+                <Legend />
+                <Line type="monotone" dataKey="TSH" stroke="#7D9645" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Free T3" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Free T4" stroke="#F59E0B" strokeWidth={3} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="analytics-empty">No records available for charting yet.</div>
+          )}
         </div>
-        <div className="kpi-card glass-card">
-          <div className="kpi-icon-wrap bg-orange">
-            <TrendingUp size={24} />
-          </div>
-          <div className="kpi-data">
-            <p>Abnormal Events</p>
-            <h3>{abnormalCount}</h3>
-          </div>
-        </div>
-      </section>
+      </div>
 
-      {/* Charts Grid */}
-      <section className="charts-grid">
-        
-        {/* Main Area Chart */}
-        <div className="chart-container large-span glass-card">
-          <div className="chart-header">
-            <h3><TrendingUp size={18} /> Hormone Trajectory</h3>
-            <p>Longitudinal tracking of key thyroid markers</p>
-          </div>
-          <div className="chart-body">
-            {monthlyChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={320}>
-                <AreaChart data={monthlyChartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorTSH" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8B9E57" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#8B9E57" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorT3" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
-                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="monthLabel" stroke="#8B9E57" tick={{ fill: '#666' }} />
-                  <YAxis stroke="#8B9E57" tick={{ fill: '#666' }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="TSH" stroke="#8B9E57" strokeWidth={3} fillOpacity={1} fill="url(#colorTSH)" />
-                  <Area type="monotone" dataKey="Free T3" stroke="#3B82F6" strokeWidth={3} fillOpacity={1} fill="url(#colorT3)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-chart">Insufficient data to visualize trends.</div>
-            )}
-          </div>
+      <div className="analytics-card">
+        <div className="analytics-card-head">
+          <h3><BarChart3 size={18} /> Latest Report Comparison</h3>
+          <span>Compare the most recent hormone values</span>
         </div>
+        <div className="analytics-chart-shell">
+          {latestComparison.length ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={latestComparison}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#D7DAC8" />
+                <XAxis dataKey="name" stroke="#555841" />
+                <YAxis stroke="#555841" />
+                <Tooltip formatter={(_, __, item) => {
+                  const rawValue = item?.payload?.rawValue;
+                  return rawValue == null || rawValue === '' ? 'Not available' : rawValue;
+                }} />
+                <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                  {latestComparison.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="analytics-empty">Upload a report to generate the latest comparison chart.</div>
+          )}
+        </div>
+      </div>
 
-        {/* Bar Chart */}
-        <div className="chart-container glass-card">
-          <div className="chart-header">
-            <h3><Activity size={18} /> Latest Reading</h3>
-            <p>Most recent lab values comparison</p>
+      <div className="analytics-grid">
+        <div className="analytics-card compact-card">
+          <div className="analytics-card-head">
+            <h3><Activity size={18} /> Hormone Status Indicator</h3>
+            <span>Latest TSH range check</span>
           </div>
-          <div className="chart-body">
-            {latestComparison.some(c => c.value > 0) ? (
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={latestComparison} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" stroke="#8B9E57" tick={{ fill: '#666' }} />
-                  <YAxis stroke="#8B9E57" tick={{ fill: '#666' }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                    {latestComparison.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-chart">No recent readings uploaded.</div>
-            )}
-          </div>
+          {latestRecord ? (
+            <div className="indicator-block">
+              <strong>{latestTshStatus}</strong>
+              <p>
+                Latest TSH is {latestRecord.tsh} mIU/L. Normal range: {REFERENCE_RANGES.tsh.low} to {REFERENCE_RANGES.tsh.high}.
+              </p>
+            </div>
+          ) : (
+            <div className="analytics-empty">No latest report is available yet.</div>
+          )}
         </div>
 
-      </section>
-
-      {/* Insights */}
-      <section className="insights-container glass-card">
-        <div className="chart-header">
-          <h3><Sparkles size={18} className="glow-icon" /> AI Medical Insight</h3>
-          <p>Automated analysis generated from your chronological data</p>
+        <div className="analytics-card compact-card">
+          <div className="analytics-card-head">
+            <h3><Sparkles size={18} /> AI Insight</h3>
+            <span>Trend summary generated from patient history</span>
+          </div>
+          <p className="insight-copy">{buildHormoneInsight(records)}</p>
         </div>
-        <div className="insight-content">
-          <p>{buildHormoneInsight(records)}</p>
-        </div>
-      </section>
-
+      </div>
     </div>
   );
 }

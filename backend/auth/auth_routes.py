@@ -44,8 +44,8 @@ async def get_me(current_user: ClerkUser = Depends(get_current_user)):
 
     return {
         "id": current_user.id,
-        "email": current_user.email or profile.get("email", ""),
-        "name": profile.get("name", ""),
+        "email": current_user.email or "",
+        "name": profile.get("full_name", ""),
         "created_at": profile.get("created_at"),
     }
 
@@ -60,18 +60,34 @@ async def sync_profile(
     Called by the frontend after every sign-in to keep the DB in sync.
     """
     try:
-        resp = (
-            supabase.table("profiles")
-            .upsert(
-                {
-                    "id": current_user.id,
-                    "email": body.email or current_user.email,
-                    "name": body.name,
-                },
-                on_conflict="id",
+        # Prefer the latest schema (full_name), fallback to legacy (name)
+        try:
+            resp = (
+                supabase.table("profiles")
+                .upsert(
+                    {
+                        "id": current_user.id,
+                        "full_name": body.name,
+                    },
+                    on_conflict="id",
+                )
+                .execute()
             )
-            .execute()
-        )
+        except Exception as inner_exc:
+            if "full_name" not in str(inner_exc):
+                raise
+
+            resp = (
+                supabase.table("profiles")
+                .upsert(
+                    {
+                        "id": current_user.id,
+                        "name": body.name,
+                    },
+                    on_conflict="id",
+                )
+                .execute()
+            )
         return {"message": "Profile synced", "profile": resp.data[0] if resp.data else {}}
     except Exception as exc:
         raise HTTPException(

@@ -10,7 +10,7 @@ import {
   Upload,
   FileDown
 } from 'lucide-react';
-import { predictThyroidDisease, parseUploadedFile, storeReportFile } from '../services/api';
+import { predictThyroidDisease, parseUploadedFile } from '../services/api';
 import { generatePDF } from '../utils/generatePDF';
 import { useNotification } from '../context/NotificationContext';
 import '../styles/PredictionForm.css';
@@ -81,7 +81,7 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [uploadedReportMeta, setUploadedReportMeta] = useState(null); // { file_url, filename, filetype }
+  const [pendingUploadedFile, setPendingUploadedFile] = useState(null);
 
   const handleDownloadPDF = async () => {
     setPdfLoading(true);
@@ -102,12 +102,7 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
     if (!file) return;
     setUploading(true);
     try {
-      // Parse file fields AND upload to Supabase Storage simultaneously
-      const [data, storedReport] = await Promise.all([
-        parseUploadedFile(file),
-        storeReportFile(file),
-      ]);
-
+      const data = await parseUploadedFile(file);
       const fields = data.fields || {};
       const fieldCount = Object.keys(fields).length;
       const extractedReportDate = fields.report_date || fields.reportDate || null;
@@ -117,30 +112,34 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
         setFormData(prev => ({ ...prev, fullName: prev.fullName || defaultPatientName, ...formFields }));
       }
 
-      // Store the uploaded file metadata for attaching to the prediction
-      if (storedReport?.file_url) {
-        setUploadedReportMeta(storedReport);
-      }
-
-      const extractedHistoryValues = extractHistoryValues(formFields);
-      if (onHistoryRecordCreated) {
-        onHistoryRecordCreated({
-          date: extractedReportDate || new Date().toISOString().slice(0, 10),
-          created_at: new Date().toISOString(),
-          tsh: extractedHistoryValues?.tsh ?? null,
-          freeT3: extractedHistoryValues?.freeT3 ?? null,
-          freeT4: extractedHistoryValues?.freeT4 ?? null,
-          source: extractedHistoryValues ? 'report-upload' : 'report-upload-partial',
+      // Keep uploaded file metadata and attach it to the next evaluated prediction.
+      let filePreview = null;
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        filePreview = await new Promise((resolve) => {
+          reader.onload = (evt) => resolve(evt.target.result);
+          reader.readAsDataURL(file);
         });
       }
 
+      setPendingUploadedFile({
+        date: extractedReportDate || new Date().toISOString().slice(0, 10),
+        extractedValues: extractHistoryValues(formFields),
+        uploadedFile: {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          preview: filePreview,
+        },
+      });
+
       if (data.status === 'partial' || fieldCount === 0) {
-        showSuccess(`File "${file.name}" uploaded and indexed. No lab values detected.`);
+        showSuccess(`✅ File "${file.name}" uploaded and indexed. No lab values detected.`);
       } else {
-        showSuccess(`Successfully loaded "${file.name}" with ${fieldCount} fields!`);
+        showSuccess(`✅ Successfully loaded "${file.name}" with ${fieldCount} fields!`);
       }
     } catch (err) {
-      showError(`Failed to upload file: ${err.message || 'Unknown error'}`);
+      showError(`❌ Failed to upload file: ${err.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -188,23 +187,34 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
         TBG: formData.TBG ? parseFloat(formData.TBG) : null
       };
 
-      // Include uploaded report metadata if available
-      if (uploadedReportMeta?.file_url) {
-        processedData.report_file_url = uploadedReportMeta.file_url;
-        processedData.report_filename = uploadedReportMeta.filename;
-        processedData.report_filetype = uploadedReportMeta.filetype;
-      }
-
       // Call API
       const response = await predictThyroidDisease(processedData);
       setResult(response);
-      setUploadedReportMeta(null); // clear after use
 
-      // Show success message & refresh history after a short delay to let DB write complete
       if (onHistoryRecordCreated) {
         showSuccess('✅ Prediction saved! Your Patient History & Analytics have been updated.');
-        setTimeout(() => onHistoryRecordCreated(), 700);
+
+        const nowIso = new Date().toISOString();
+        const extractedValues = pendingUploadedFile?.extractedValues;
+        const evaluationRecord = {
+          id: `local-eval-${Date.now()}`,
+          date: pendingUploadedFile?.date || nowIso.slice(0, 10),
+          created_at: nowIso,
+          tsh: processedData.TSH ?? extractedValues?.tsh ?? null,
+          freeT3: processedData.T3 ?? extractedValues?.freeT3 ?? null,
+          freeT4: processedData.TT4 ?? extractedValues?.freeT4 ?? null,
+          prediction: response?.result_label || response?.prediction_label || response?.prediction || 'Unknown',
+          confidence: response?.confidence ?? null,
+          source: 'manual_entry',
+          uploadedFile: pendingUploadedFile?.uploadedFile || null,
+        };
+
+        // Push local record immediately and trigger backend refresh.
+        onHistoryRecordCreated(evaluationRecord);
       }
+
+      // This upload has now been paired with an evaluation.
+      setPendingUploadedFile(null);
     } catch (err) {
       setError(err.message || 'Failed to get prediction. Please check your input and try again.');
     } finally {
@@ -252,6 +262,7 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
     });
     setResult(null);
     setError(null);
+    setPendingUploadedFile(null);
   };
 
   React.useEffect(() => {

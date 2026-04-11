@@ -10,10 +10,10 @@ import ProfileSettings from './components/ProfileSettings';
 import Sidebar from './components/Sidebar';
 import LandingPage from './components/LandingPage';
 import { NotificationProvider } from './context/NotificationContext';
-import { supabase } from './supabase/supabaseClient';
-import { setTokenGetter } from './services/api';
+import { setTokenGetter, syncUserProfile } from './services/api';
 import {
   getPatientDisplayName,
+  hydratePatientRecords,
   loadPatientRecords,
 } from './utils/patientRecords';
 import './styles/App.css';
@@ -27,9 +27,26 @@ function App() {
   const { user, isLoaded, isSignedIn } = useUser();
   const { signOut, getToken } = useClerkAuth();
   const [activeTab, setActiveTab] = useState('prediction');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [patientRecords, setPatientRecords] = useState([]);
+  const [localHistoryRecords, setLocalHistoryRecords] = useState([]);
   const [updateCounter, setUpdateCounter] = useState(0); // Force re-renders
+
+  const mergeHistoryRecords = (baseRecords, extraRecords) => {
+    const signature = (record) => {
+      const date = record?.date || '';
+      const tsh = record?.tsh ?? '';
+      const t3 = record?.freeT3 ?? '';
+      const t4 = record?.freeT4 ?? '';
+      const prediction = record?.prediction ?? '';
+      return `${date}|${tsh}|${t3}|${t4}|${prediction}`;
+    };
+
+    const merged = new Map();
+    (baseRecords || []).forEach((record) => merged.set(signature(record), record));
+    (extraRecords || []).forEach((record) => merged.set(signature(record), record));
+    return Array.from(merged.values());
+  };
 
   // Wire the Clerk token into the API service layer
   useEffect(() => {
@@ -41,17 +58,14 @@ function App() {
     if (!isSignedIn || !user) return;
     const upsertProfile = async () => {
       try {
-        await supabase.from('profiles').upsert(
-          {
-            id: user.id,
-            email: user.primaryEmailAddress?.emailAddress ?? '',
-            name: user.fullName ?? '',
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        );
+        await syncUserProfile({
+          name: user.fullName ?? '',
+          email: user.primaryEmailAddress?.emailAddress ?? '',
+        });
+
+        console.log('[Profile sync] Profile upserted successfully');
       } catch (e) {
-        console.warn('[Profile sync]', e);
+        console.error('[Profile sync]', e);
       }
     };
     upsertProfile();
@@ -61,13 +75,16 @@ function App() {
   useEffect(() => {
     if (!isSignedIn || !user) {
       setPatientRecords([]);
+      setLocalHistoryRecords([]);
       return;
     }
-    // Fetch predictions from Supabase
+
+    // Fetch evaluated predictions from backend and merge local records containing file metadata.
     loadPatientRecords(user).then((records) => {
-      setPatientRecords(records);
+      const merged = hydratePatientRecords(mergeHistoryRecords(records, localHistoryRecords));
+      setPatientRecords(merged);
     });
-  }, [isSignedIn, user, updateCounter]);
+  }, [isSignedIn, user, updateCounter, localHistoryRecords]);
 
   const handleLogout = async () => {
     await signOut();
@@ -75,7 +92,18 @@ function App() {
   };
 
   // This function now just triggers the useEffect hook above
-  const handleAddPatientRecord = () => {
+  const handleAddPatientRecord = (recordPayload) => {
+    if (recordPayload && typeof recordPayload === 'object') {
+      const localRecord = {
+        id: recordPayload.id || `upload-${Date.now()}`,
+        prediction: recordPayload.prediction || 'Unknown',
+        confidence: recordPayload.confidence ?? null,
+        ...recordPayload,
+      };
+      setLocalHistoryRecords((prev) => mergeHistoryRecords(prev, [localRecord]));
+    }
+
+    // Trigger backend refresh for evaluated thyroid predictions.
     setUpdateCounter(c => c + 1);
   };
 

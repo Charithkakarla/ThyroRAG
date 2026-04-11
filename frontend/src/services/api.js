@@ -76,6 +76,24 @@ export const getPredictionHistory = async () => {
 };
 
 /**
+ * Sync signed-in Clerk user profile into backend/Supabase.
+ */
+export const syncUserProfile = async ({ name = '', email = '' } = {}) => {
+  try {
+    const headers = await getAuthHeaders();
+    const response = await axios.post(
+      `${API_BASE_URL}/auth/sync-profile`,
+      { name, email },
+      { headers }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Profile Sync API Error:', error);
+    throw new Error(error.response?.data?.detail || 'Failed to sync profile');
+  }
+};
+
+/**
  * Upload a patient data file (CSV or JSON) to the backend for parsing.
  * Returns { fields: { age, sex, TSH, ... } } to auto-fill the diagnosis form.
  */
@@ -150,5 +168,13 @@ export const uploadDocumentToRAG = async (file, onProgress) => {
   }
 };
 
-const apiService = { predictThyroidDisease, sendChatMessage, getPredictionHistory, parseUploadedFile, storeReportFile, uploadDocumentToRAG };
+const apiService = {
+  predictThyroidDisease,
+  sendChatMessage,
+  getPredictionHistory,
+  syncUserProfile,
+  parseUploadedFile,
+  storeReportFile,
+  uploadDocumentToRAG,
+};
 export default apiService;

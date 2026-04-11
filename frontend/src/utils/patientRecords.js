@@ -1,9 +1,9 @@
 /**
- * Patient Records Utilities — Powered by Supabase
- * Fetches predictions from the backend `predictions` table
+ * Patient Records Utilities
+ * Fetches predictions through Clerk-authenticated backend APIs
  * Only shows real predictions from thyroid diagnosis evaluations
  */
-import { supabase } from '../supabase/supabaseClient';
+import { getPredictionHistory } from '../services/api';
 
 export const REFERENCE_RANGES = {
   tsh: { label: 'TSH', low: 0.4, high: 4.0 },
@@ -24,60 +24,32 @@ export function getHormoneStatus(value, low, high) {
 }
 
 function sortAscending(records) {
-  return [...records].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-}
-
-/**
- * Parses the notes field, which may contain a JSON string with an interpretation and report file data.
- */
-function parseNotes(notesStr) {
-  if (!notesStr) return { interpretation: '', report_file_url: null, report_filename: null, report_filetype: null };
-  try {
-    const obj = JSON.parse(notesStr);
-    return {
-      interpretation: obj.interpretation || '',
-      key_reasons: obj.key_reasons || [],
-      report_file_url: obj.report_file_url || null,
-      report_filename: obj.report_filename || null,
-      report_filetype: obj.report_filetype || null,
-    };
-  } catch {
-    // Falls back to string if notes is not valid JSON
-    return { interpretation: notesStr, report_file_url: null, report_filename: null, report_filetype: null };
-  }
+  return [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
 /**
  * Normalize Supabase prediction record to internal format
  */
 function normalizeSupabaseRecord(record, patientName) {
-  const notes = parseNotes(record.notes);
+  const freeT3 = record.free_t3 ?? record.t3 ?? null;
+  const freeT4 = record.free_t4 ?? record.tt4 ?? null;
+
   return {
     id: record.id,
-    patientName: patientName,
+    patientName: record.full_name || patientName,
     date: new Date(record.created_at).toISOString().split('T')[0],
     created_at: record.created_at,
     tsh: record.tsh ?? null,
-    freeT3: record.t3 ?? null,    // DB column is 't3'
-    freeT4: record.tt4 ?? null,   // DB column is 'tt4'
+    freeT3,
+    freeT4,
+    // Keep aliases available in case other components still read the raw schema names.
+    t3: freeT3,
+    tt4: freeT4,
     source: 'prediction',
     prediction: record.prediction,
-    confidence: record.confidence ?? null,
-    probabilities: {
-      Negative: record.prob_negative ?? null,
-      Hypothyroid: record.prob_hypothyroid ?? null,
-      Hyperthyroid: record.prob_hyperthyroid ?? null,
-    },
-    interpretation: notes.interpretation,
-    keyReasons: notes.key_reasons,
-    reportFileUrl: notes.report_file_url,
-    reportFilename: notes.report_filename,
-    reportFiletype: notes.report_filetype,
-    // Store original record data to re-generate PDF if needed
-    rawRecord: record 
+    confidence: record.confidence,
   };
 }
-
 
 /**
  * Add hormone status to each record based on reference ranges
@@ -106,29 +78,21 @@ export async function loadPatientRecords(user) {
   if (!user?.id) return [];
 
   try {
-    const { data, error } = await supabase
-      .from('predictions')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true });
+    const result = await getPredictionHistory();
+    const data = Array.isArray(result?.predictions) ? result.predictions : [];
 
-    if (error) {
-      console.error('[Supabase] Could not load predictions:', error);
-      return [];
-    }
+    if (!Array.isArray(data)) return [];
 
-    if (!data || !Array.isArray(data)) return [];
-
-    console.log('[Supabase] Raw data received:', data); // DEBUGGING
+    console.log('[Backend] Raw prediction data received:', data); // DEBUGGING
 
     const patientName = getPatientDisplayName(user);
     const normalized = data.map((record) => normalizeSupabaseRecord(record, patientName));
     const hydrated = hydratePatientRecords(normalized);
     
-    console.log('[Supabase] Processed records:', hydrated); // DEBUGGING
+    console.log('[Backend] Processed records:', hydrated); // DEBUGGING
     return hydrated;
   } catch (err) {
-    console.error('[Patient records] Failed to load from Supabase:', err);
+    console.error('[Patient records] Failed to load from backend history endpoint:', err);
     return [];
   }
 }

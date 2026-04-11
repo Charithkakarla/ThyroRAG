@@ -19,13 +19,15 @@ CREATE TABLE IF NOT EXISTS profiles (
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own profile"   ON profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
 DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
 DROP POLICY IF EXISTS "Service role full access on profiles" ON profiles;
 
-CREATE POLICY "Users can view own profile"   ON profiles FOR SELECT USING (auth.uid()::text = id);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid()::text = id);
-CREATE POLICY "Service role full access on profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can view own profile"   ON profiles FOR SELECT USING ((auth.jwt()->>'sub') = id);
+CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK ((auth.jwt()->>'sub') = id);
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING ((auth.jwt()->>'sub') = id);
+CREATE POLICY "Service role full access on profiles" ON profiles FOR ALL USING (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role') WITH CHECK (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role');
 
 -- ── 2. PREDICTIONS ───────────────────────────────────────────
 -- NOTE: user_id is TEXT to store Clerk user IDs ("user_abc123" format, not UUID)
@@ -74,9 +76,9 @@ DROP POLICY IF EXISTS "Users can view own predictions"          ON predictions;
 DROP POLICY IF EXISTS "Users can insert own predictions"        ON predictions;
 DROP POLICY IF EXISTS "Service role full access on predictions" ON predictions;
 
-CREATE POLICY "Users can view own predictions"   ON predictions FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "Users can insert own predictions" ON predictions FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "Service role full access on predictions" ON predictions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can view own predictions"   ON predictions FOR SELECT USING ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Users can insert own predictions" ON predictions FOR INSERT WITH CHECK ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Service role full access on predictions" ON predictions FOR ALL USING (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role') WITH CHECK (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role');
 
 -- ── 3. REPORTS ───────────────────────────────────────────────
 -- NOTE: user_id is TEXT to store Clerk user IDs
@@ -97,9 +99,9 @@ DROP POLICY IF EXISTS "Users can view own reports"   ON reports;
 DROP POLICY IF EXISTS "Users can insert own reports" ON reports;
 DROP POLICY IF EXISTS "Users can delete own reports" ON reports;
 
-CREATE POLICY "Users can view own reports"   ON reports FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "Users can insert own reports" ON reports FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "Users can delete own reports" ON reports FOR DELETE USING (auth.uid()::text = user_id);
+CREATE POLICY "Users can view own reports"   ON reports FOR SELECT USING ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Users can insert own reports" ON reports FOR INSERT WITH CHECK ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Users can delete own reports" ON reports FOR DELETE USING ((auth.jwt()->>'sub') = user_id);
 
 -- ── 4. QUERIES (RAG Chat History) ───────────────────────────
 -- NOTE: user_id is TEXT to store Clerk user IDs
@@ -117,9 +119,9 @@ DROP POLICY IF EXISTS "Users can view own queries"          ON queries;
 DROP POLICY IF EXISTS "Users can insert own queries"        ON queries;
 DROP POLICY IF EXISTS "Service role full access on queries" ON queries;
 
-CREATE POLICY "Users can view own queries"   ON queries FOR SELECT USING (auth.uid()::text = user_id);
-CREATE POLICY "Users can insert own queries" ON queries FOR INSERT WITH CHECK (auth.uid()::text = user_id);
-CREATE POLICY "Service role full access on queries" ON queries FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Users can view own queries"   ON queries FOR SELECT USING ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Users can insert own queries" ON queries FOR INSERT WITH CHECK ((auth.jwt()->>'sub') = user_id);
+CREATE POLICY "Service role full access on queries" ON queries FOR ALL USING (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role') WITH CHECK (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role');
 
 -- ── 5. Auto-create profile on signup ────────────────────────
 -- NOTE: This trigger fires for Supabase-native signups only.
@@ -132,7 +134,7 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -146,7 +148,7 @@ BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS set_profiles_updated_at ON profiles;
 CREATE TRIGGER set_profiles_updated_at
@@ -159,5 +161,56 @@ DO $$
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='predictions' AND column_name='source') THEN
     ALTER TABLE predictions ADD COLUMN source TEXT DEFAULT 'manual_entry';
+  END IF;
+END $$;
+
+-- Harden legacy helper function if it exists in older projects
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'set_updated_at'
+      AND p.pronargs = 0
+  ) THEN
+    EXECUTE 'ALTER FUNCTION public.set_updated_at() SET search_path = public';
+  END IF;
+END $$;
+
+-- Convert legacy UUID user-id columns to TEXT for Clerk IDs (user_xxx)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE profiles ALTER COLUMN id TYPE TEXT USING id::text;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'predictions' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE predictions ALTER COLUMN user_id TYPE TEXT USING user_id::text;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'reports' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE reports ALTER COLUMN user_id TYPE TEXT USING user_id::text;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'queries' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE queries ALTER COLUMN user_id TYPE TEXT USING user_id::text;
   END IF;
 END $$;

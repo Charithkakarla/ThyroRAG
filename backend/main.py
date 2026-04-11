@@ -12,7 +12,6 @@ import io
 import csv
 import json
 import re
-import time
 import requests as _requests
 from RAG.rag_engine import rag_engine
 from supabase_client import supabase
@@ -505,8 +504,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -544,10 +546,6 @@ class ThyroidFeatures(BaseModel):
     FTI: Optional[float] = Field(default=None, example=109.0)
     TBG: Optional[float] = Field(default=None, example=None)
     referral_source: str = Field(default="other", example="SVI")
-    # Uploaded report metadata (optional) — stored in notes JSON
-    report_file_url: Optional[str] = Field(default=None)
-    report_filename: Optional[str] = Field(default=None)
-    report_filetype: Optional[str] = Field(default=None)
 
 class ChatRequest(BaseModel):
     message: str = Field(..., example="What is hypothyroidism?")
@@ -559,21 +557,14 @@ model = None
 @app.on_event("startup")
 def load_model():
     global model
-    
-    # ── Ensure Supabase Storage Bucket exists ──────────
-    try:
-        buckets = supabase.storage.list_buckets()
-        bucket_exists = any(b.id == 'reports' for b in buckets)
-        if not bucket_exists:
-            print("[Startup] Bucket 'reports' not found. Creating it...")
-            supabase.storage.create_bucket('reports', options={"public": True})
-            print("[Startup] Bucket 'reports' created successfully.")
-    except Exception as e:
-        print(f"[Startup WARNING] Could not verify/create 'reports' bucket: {e}")
+    base_dir = Path(__file__).resolve().parent
+    candidate_paths = [
+        base_dir / "final_model.pkl",
+        base_dir.parent / "final_model.pkl",
+    ]
 
-    # ── Load Prediction Model ──────────
-    for path in ["../final_model.pkl", "final_model.pkl"]:
-        if os.path.exists(path):
+    for path in candidate_paths:
+        if path.exists():
             try:
                 model = joblib.load(path)
                 print(f"[OK] Model loaded from {path}")
@@ -623,32 +614,6 @@ async def predict(data: ThyroidFeatures, current_user=Depends(get_current_user))
         for _bf in _BOOL_FIELDS:
             raw = str(input_dict.get(_bf, "f")).strip().lower()
             input_dict[_bf] = "t" if raw in ("t", "true", "yes", "1") else "f"
-
-        # Extract uploaded report metadata (if any) before feeding to ML model
-        report_file_url = input_dict.pop("report_file_url", None)
-        report_filename = input_dict.pop("report_filename", None)
-        report_filetype = input_dict.pop("report_filetype", None)
-
-        # ── Proactive Feature: Link latest RAG upload if missing ──────────
-        # Fix: If no file was sent from the frontend, look in RAG/uploaded_files for a very recent upload
-        if not report_file_url:
-            rag_upload_dir = Path(__file__).parent / "RAG" / "uploaded_files"
-            if rag_upload_dir.exists():
-                files = sorted(rag_upload_dir.glob("*"), key=os.path.getmtime, reverse=True)
-                if files:
-                    latest_file = files[0]
-                    # Check if it was uploaded within the last 30 minutes
-                    if (time.time() - os.path.getmtime(latest_file)) < 1800:
-                         report_filename = latest_file.name
-                         from mimetypes import guess_type
-                         report_filetype = guess_type(str(latest_file))[0] or "application/octet-stream"
-                         
-                         try:
-                             # Try to get the Supabase URL and return it
-                             storage_path = f"reports/{report_filename}"
-                             report_file_url = supabase.storage.from_("reports").get_public_url(storage_path)
-                         except:
-                             pass
 
         input_df = pd.DataFrame([input_dict])
         prediction = model.predict(input_df)[0]
@@ -700,68 +665,51 @@ async def predict(data: ThyroidFeatures, current_user=Depends(get_current_user))
         # 6. Save the prediction to Supabase for the user's history
         if current_user:
             try:
-                probs = result.get("probabilities", {})
-                # Build notes as JSON — holds clinical interpretation + optional report file info
-                notes_obj = {
-                    "interpretation": result.get("clinical_interpretation", ""),
-                    "key_reasons": result.get("key_reasons", []),
-                }
-                if report_file_url:
-                    notes_obj["report_file_url"] = report_file_url
-                if report_filename:
-                    notes_obj["report_filename"] = report_filename
-                if report_filetype:
-                    notes_obj["report_filetype"] = report_filetype
+                def _as_bool(value):
+                    return str(value).strip().lower() in ("t", "true", "yes", "1")
 
                 prediction_record = {
                     "user_id": current_user.id,
-                    "age": input_dict.get("age"),
-                    "sex": input_dict.get("sex"),
-                    "tsh": input_dict.get("TSH") or input_dict.get("tsh"),
-                    "t3": input_dict.get("T3") or input_dict.get("t3"),
-                    "tt4": input_dict.get("TT4") or input_dict.get("tt4"),
-                    "t4u": input_dict.get("T4U") or input_dict.get("t4u"),
-                    "fti": input_dict.get("FTI") or input_dict.get("fti"),
-                    "on_thyroxine": input_dict.get("on_thyroxine"),
-                    "thyroid_surgery": input_dict.get("thyroid_surgery"),
-                    "query_hypothyroid": input_dict.get("query_hypothyroid"),
-                    "query_hyperthyroid": input_dict.get("query_hyperthyroid"),
-                    "pregnant": input_dict.get("pregnant"),
-                    "sick": input_dict.get("sick"),
-                    "tumor": input_dict.get("tumor"),
-                    "lithium": input_dict.get("lithium"),
-                    "goitre": input_dict.get("goitre"),
+                    "age": data.age,
+                    "sex": data.sex,
+                    "weight": data.weight,
+                    "tsh": data.TSH,
+                    "t3": data.T3,
+                    "tt4": data.TT4,
+                    "t4u": data.T4U,
+                    "fti": data.FTI,
+                    "tbg": data.TBG,
+                    "on_thyroxine": _as_bool(data.on_thyroxine),
+                    "query_on_thyroxine": _as_bool(data.query_on_thyroxine),
+                    "on_antithyroid_medication": _as_bool(data.on_antithyroid_medication),
+                    "sick": _as_bool(data.sick),
+                    "pregnant": _as_bool(data.pregnant),
+                    "thyroid_surgery": _as_bool(data.thyroid_surgery),
+                    "i131_treatment": _as_bool(data.I131_treatment),
+                    "query_hypothyroid": _as_bool(data.query_hypothyroid),
+                    "query_hyperthyroid": _as_bool(data.query_hyperthyroid),
+                    "lithium": _as_bool(data.lithium),
+                    "goitre": _as_bool(data.goitre),
+                    "tumor": _as_bool(data.tumor),
+                    "hypopituitary": _as_bool(data.hypopituitary),
+                    "psych": _as_bool(data.psych),
                     "prediction": label,
-                    "confidence": float(result["confidence"]),
-                    "prob_negative": float(probs.get("Negative", 0)),
-                    "prob_hypothyroid": float(probs.get("Hypothyroid", 0)),
-                    "prob_hyperthyroid": float(probs.get("Hyperthyroid", 0)),
-                    "source": "manual_entry" if not report_file_url else "report_upload",
-                    "notes": json.dumps(notes_obj),
+                    "confidence": result["confidence"],
+                    "prob_negative": result["probabilities"].get("Negative"),
+                    "prob_hypothyroid": result["probabilities"].get("Hypothyroid"),
+                    "prob_hyperthyroid": result["probabilities"].get("Hyperthyroid"),
+                    "source": "manual_entry",
                 }
-
-                print("[Supabase Insert] Saving prediction for user:", current_user.id)
-                try:
-                    db_response = supabase.table("predictions").insert(prediction_record).execute()
-                except Exception as insert_e:
-                    # Adaptive Logic: if the user hasn't updated their DB schema with the 'source' column
-                    if "source" in str(insert_e) and "PGRST204" in str(insert_e):
-                        print("[Supabase Warning] 'source' column missing. Retrying without it...")
-                        # Remove the problematic field and retry
-                        prediction_record.pop("source", None)
-                        db_response = supabase.table("predictions").insert(prediction_record).execute()
-                    else:
-                        raise insert_e
-
-                if getattr(db_response, 'data', None):
-                    print("[Supabase Insert] Success — rows saved:", len(db_response.data))
-                else:
-                    print("[Supabase Insert] Unexpected response:", db_response)
+                print("[Supabase Insert] Attempting to save prediction:", prediction_record) # DEBUGGING
+                db_response = supabase.from_("predictions").insert(prediction_record).execute()
+                
+                if db_response.data:
+                    print("[Supabase Insert] Success:", db_response.data)
+                if getattr(db_response, 'error', None):
+                    print("[Supabase Insert] Error:", getattr(db_response, 'error', None)) # DEBUGGING
 
             except Exception as e:
-                import traceback
-                traceback.print_exc()
-                print(f"[ERROR] Failed to save prediction to Supabase: {e}")
+                print(f"[ERROR] Failed to save prediction to Supabase: {e}") # DEBUGGING
 
         # ── Upsert into Qdrant for future chat retrieval ─────────────
         try:
@@ -879,81 +827,7 @@ def _parse_row_to_fields(row: dict) -> dict:
             result[canonical] = val
     return result
 
-@app.post("/upload/store-report")
-async def store_report_file(
-    file: UploadFile = File(...),
-    current_user=Depends(get_current_user)
-):
-    """
-    Upload a patient report file to Supabase Storage.
-    Returns the public URL so it can be embedded in the prediction record.
-    Uses the service-role key to bypass RLS on the storage bucket.
-    """
-    content = await file.read()
-    original_filename = file.filename or "report"
-    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    storage_path = f"{current_user.id}/{timestamp_str}_{original_filename.replace(' ', '_')}"
-
-    mime_type = file.content_type
-    if not mime_type or mime_type == "application/octet-stream":
-        from mimetypes import guess_type
-        mime_type = guess_type(original_filename)[0] or "application/octet-stream"
-
-    try:
-        # Attempt to upload to Supabase Storage bucket 'reports'
-        try:
-            upload_res = supabase.storage.from_("reports").upload(
-                path=storage_path,
-                file=content,
-                file_options={"content-type": mime_type},
-            )
-        except Exception as e:
-            # Self-healing: if bucket missing, create it and retry once
-            if "Bucket not found" in str(e) or "404" in str(e):
-                print("[Storage] Bucket 'reports' missing. One-time creation...")
-                try:
-                    supabase.storage.create_bucket("reports", options={"public": True})
-                    # Re-try the upload now that bucket exists
-                    upload_res = supabase.storage.from_("reports").upload(
-                        path=storage_path,
-                        file=content,
-                        file_options={"content-type": mime_type},
-                    )
-                except Exception as retry_e:
-                    print(f"[Storage] Retry failed: {retry_e}")
-                    raise retry_e
-            else:
-                raise e
-
-        # Get the public URL
-        public_url_res = supabase.storage.from_("reports").get_public_url(storage_path)
-        # Handle different return types of get_public_url (string, object, or dict)
-        public_url = ""
-        if isinstance(public_url_res, str):
-            public_url = public_url_res
-        elif isinstance(public_url_res, dict):
-            public_url = public_url_res.get('publicUrl', '')
-        else:
-            # For some SDK versions it's an object with a .public_url property
-            public_url = getattr(public_url_res, 'public_url', '')
-
-        print(f"[Storage] Report uploaded → {storage_path}")
-        return {
-            "status": "ok",
-            "file_url": public_url,
-            "filename": original_filename,
-            "filetype": mime_type,
-        }
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        # Strategy: return status 500 so UI can show warning, but preserve terminal log
-        print(f"[Storage ERROR] Could not upload report: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not upload report to storage: {str(e)}")
-
-
 @app.post("/upload/parse-file")
-
 async def parse_upload_file(file: UploadFile = File(...), current_user=Depends(get_current_user)):
     """
     Accept a CSV or JSON file containing patient data:
@@ -1255,4 +1129,3 @@ async def update_profile(updates: dict, current_user=Depends(get_current_user)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-# Trigger reload

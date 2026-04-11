@@ -1,19 +1,35 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, Activity, Search, X, Download, FileText, ChevronRight, Eye, ExternalLink } from 'lucide-react';
-import { generatePDF } from '../utils/generatePDF';
+import { Calendar, Activity, Search, X, Download, FileText } from 'lucide-react';
 import '../styles/PatientHistory.css';
 
 const FILTER_OPTIONS = [
   { value: 'all', label: 'All Records' },
-  { value: 'abnormal', label: 'Abnormal Outcomes' },
-  { value: 'normal', label: 'Normal Outcomes' },
+  { value: 'any-abnormal', label: 'Any Abnormal' },
+  { value: 'all-normal', label: 'All Normal' },
+  { value: 'tsh-high', label: 'TSH High' },
+  { value: 'tsh-normal', label: 'TSH Normal' },
+  { value: 'free-t3-low', label: 'Free T3 Low' },
+  { value: 'free-t3-normal', label: 'Free T3 Normal' },
+  { value: 'free-t4-normal', label: 'Free T4 Normal' },
 ];
 
 function matchesFilter(record, filterValue) {
   if (filterValue === 'all') return true;
-  const isAbnormal = record.prediction && record.prediction.toLowerCase() !== 'negative' && record.prediction !== '0';
-  if (filterValue === 'abnormal') return isAbnormal;
-  if (filterValue === 'normal') return !isAbnormal;
+  if (filterValue === 'any-abnormal') {
+    return [record.statuses?.tsh, record.statuses?.freeT3, record.statuses?.freeT4].some(
+      (status) => status && status !== 'Normal'
+    );
+  }
+  if (filterValue === 'all-normal') {
+    return [record.statuses?.tsh, record.statuses?.freeT3, record.statuses?.freeT4].every(
+      (status) => status === 'Normal'
+    );
+  }
+  if (filterValue === 'tsh-high') return record.statuses?.tsh === 'High';
+  if (filterValue === 'tsh-normal') return record.statuses?.tsh === 'Normal';
+  if (filterValue === 'free-t3-low') return record.statuses?.freeT3 === 'Low';
+  if (filterValue === 'free-t3-normal') return record.statuses?.freeT3 === 'Normal';
+  if (filterValue === 'free-t4-normal') return record.statuses?.freeT4 === 'Normal';
   return true;
 }
 
@@ -23,9 +39,9 @@ function formatValue(value) {
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
   });
 }
 
@@ -37,186 +53,127 @@ function formatFileSize(bytes) {
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
-// Enhanced Detail Modal Component
+function formatConfidence(value) {
+  if (value == null || value === '') return 'N/A';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 'N/A';
+
+  // Stored model confidence is typically 0..1; support legacy 0..100 as well.
+  if (numeric > 1) return `${numeric.toFixed(1)}%`;
+  return `${(numeric * 100).toFixed(1)}%`;
+}
+
+// Detail Modal Component
 function RecordDetailModal({ record, onClose }) {
-  const [pdfGenerating, setPdfGenerating] = useState(false);
   if (!record) return null;
 
-  const predictionLabel = record.prediction === '0' ? 'Negative' :
-                          record.prediction === '1' ? 'Hypothyroid' :
-                          record.prediction === '2' ? 'Hyperthyroid' :
-                          (record.prediction || 'Unknown');
-  
-  // Use the stored Source field from the DB if available, fallback to file detection
-  const recordSource = record.rawRecord?.source === 'report_upload' ? 'Extracted from Medical Report' : 'Manual Data Entry';
-  const hasFile = !!record.reportFileUrl;
-
-  const handleDownloadPDF = async () => {
-    setPdfGenerating(true);
-    try {
-      const raw = record.rawRecord;
-      const formData = {
-        fullName: record.patientName,
-        age: raw.age,
-        sex: raw.sex,
-        weight: raw.weight,
-        TSH: raw.tsh,
-        T3: raw.t3,
-        TT4: raw.tt4,
-        T4U: raw.t4u,
-        FTI: raw.fti,
-        on_thyroxine: raw.on_thyroxine ? 'Yes' : 'No',
-        thyroid_surgery: raw.thyroid_surgery ? 'Yes' : 'No',
-        pregnant: raw.pregnant ? 'Yes' : 'No',
-        sick: raw.sick ? 'Yes' : 'No',
-        goitre: raw.goitre ? 'Yes' : 'No',
-        tumor: raw.tumor ? 'Yes' : 'No',
-        lithium: raw.lithium ? 'Yes' : 'No',
-        query_hypothyroid: raw.query_hypothyroid ? 'Yes' : 'No',
-        query_hyperthyroid: raw.query_hyperthyroid ? 'Yes' : 'No',
-      };
-      
-      const result = {
-        result_label: predictionLabel,
-        confidence: record.confidence,
-        probabilities: record.probabilities,
-        clinical_interpretation: record.interpretation,
-        key_reasons: record.keyReasons
-      };
-      
-      await generatePDF(result, formData);
-    } catch (err) {
-      console.error('Failed to generate PDF:', err);
-    } finally {
-      setPdfGenerating(false);
-    }
-  };
+  const uploadedFile = record.uploadedFile || (record.file_url
+    ? {
+        name: record.file_name || 'Uploaded report',
+        type: record.file_type || 'File',
+        size: record.file_size || 0,
+        preview: null,
+        url: record.file_url,
+      }
+    : null);
 
   return (
-    <div className="glass-modal-overlay" onClick={onClose}>
-      <div className="glass-modal-content detail-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="glass-modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        
-        <div className="modal-header-hero">
-          <div className="modal-date-chip">{formatDate(record.created_at)}</div>
-          <h2>Medical Assessment Summary</h2>
-          <div className={`status-glow-badge outcome-${predictionLabel.toLowerCase()}`}>
-            {predictionLabel}
-          </div>
-          {record.confidence && (
-            <div className="modal-confidence">AI Confidence Level: {(record.confidence * 100).toFixed(1)}%</div>
-          )}
+    <div className="detail-modal-overlay" onClick={onClose}>
+      <div className="detail-modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="detail-modal-header">
+          <h3>Thyroid Lab Record Details</h3>
+          <button className="detail-modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
         </div>
 
-        <div className="modal-scroll-area">
-          <div className="modal-grid-body">
-            {/* Left Column: Metrics & Analysis */}
-            <div className="modal-main-col">
-
-              <div className="glass-section metrics-container-section">
-                <h3><Activity size={16} /> Hormone Analysis</h3>
-                <div className="lab-metrics-grid">
-                  <div className="metric-box highlight">
-                    <span className="metric-label">TSH</span>
-                    <span className="metric-value">{formatValue(record.tsh)} <small>mIU/L</small></span>
-                  </div>
-                  <div className="metric-box">
-                    <span className="metric-label">Free T3</span>
-                    <span className="metric-value">{formatValue(record.freeT3)} <small>ng/mL</small></span>
-                  </div>
-                  <div className="metric-box">
-                    <span className="metric-label">Free T4</span>
-                    <span className="metric-value">{formatValue(record.freeT4)} <small>µg/dL</small></span>
-                  </div>
-                </div>
+        <div className="detail-modal-body">
+          {/* Record Details Section */}
+          <div className="detail-section">
+            <h4>Lab Results</h4>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <label>Date</label>
+                <span>{formatDate(record.date)}</span>
               </div>
-
-              {hasFile ? (
-                <div className="glass-section document-preview-section">
-                  <div className="section-header-row">
-                    <h3><Eye size={16} /> Original Report Preview</h3>
-                    <div className="header-actions">
-                      <a 
-                        href={record.reportFileUrl} 
-                        download={record.reportFilename || 'medical-report'}
-                        className="download-text-btn"
-                      >
-                        <Download size={14} /> Download File
-                      </a>
-                    </div>
-                  </div>
-                  <div className="modal-file-preview-container">
-                    {(record.reportFiletype?.startsWith('image/') || 
-                      /\.(webp|avif|jpg|jpeg|png|gif|bmp)$/i.test(record.reportFileUrl || '')) ? (
-                      <img src={record.reportFileUrl} alt="Report Preview" className="preview-image" />
-                    ) : record.reportFiletype?.includes('pdf') || 
-                        record.reportFilename?.toLowerCase().endsWith('.pdf') || 
-                        !record.reportFiletype ? (
-                      <iframe 
-                        src={`${record.reportFileUrl}#toolbar=0`} 
-                        title="PDF Preview" 
-                        className="preview-iframe"
-                      />
-                    ) : (
-                      <div className="unsupported-preview">
-                        <div className="file-card-box">
-                          <FileText size={64} className="file-icon-large" />
-                          <div className="file-details-stack">
-                            <strong>{record.reportFilename || 'Medical Document'}</strong>
-                            <span>{record.reportFiletype || 'Binary File'}</span>
-                          </div>
-                          <a 
-                            href={record.reportFileUrl} 
-                            download={record.reportFilename || 'document'}
-                            className="btn-modal-action primary download-full-btn"
-                          >
-                            <Download size={18} /> Download Original File
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="glass-section no-file-section">
-                  <div className="no-file-msg">
-                    <Activity size={24} className="faint-icon" />
-                    <p>No medical file was attached to this specific evaluation.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column: Actions */}
-            <div className="modal-side-col">
-              <div className="glass-section actions-section">
-                <h3>Quick Actions</h3>
-                <div className="action-buttons-stack">
-                  <button 
-                    className="btn-modal-action primary" 
-                    onClick={handleDownloadPDF}
-                    disabled={pdfGenerating}
-                  >
-                    {pdfGenerating ? 'Generating...' : <><Download size={16} /> Re-generate AI PDF</>}
-                  </button>
-                  
-                  {hasFile && (
-                    <a 
-                      href={record.reportFileUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="btn-modal-action secondary"
-                    >
-                      <ExternalLink size={16} /> Open in New Tab
-                    </a>
-                  )}
-                </div>
+              <div className="detail-item">
+                <label>TSH</label>
+                <span className={`detail-value detail-value-${record.statuses?.tsh?.toLowerCase()}`}>
+                  {formatValue(record.tsh)} <span className="detail-status">({record.statuses?.tsh})</span>
+                </span>
               </div>
-
-
+              <div className="detail-item">
+                <label>Free T3</label>
+                <span className={`detail-value detail-value-${record.statuses?.freeT3?.toLowerCase()}`}>
+                  {formatValue(record.freeT3)} <span className="detail-status">({record.statuses?.freeT3})</span>
+                </span>
+              </div>
+              <div className="detail-item">
+                <label>Free T4</label>
+                <span className={`detail-value detail-value-${record.statuses?.freeT4?.toLowerCase()}`}>
+                  {formatValue(record.freeT4)} <span className="detail-status">({record.statuses?.freeT4})</span>
+                </span>
+              </div>
             </div>
+          </div>
+
+          <div className="detail-section">
+            <h4>Prediction Result</h4>
+            <div className="result-panel">
+              <div className="result-item">
+                <label>Result</label>
+                <span className="result-label">{record.prediction || 'Not available'}</span>
+              </div>
+              <div className="result-item">
+                <label>Confidence</label>
+                <span className="result-confidence">{formatConfidence(record.confidence)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Uploaded File Section */}
+          {uploadedFile ? (
+            <div className="detail-section">
+              <h4>Uploaded File</h4>
+              <div className="file-info">
+                <div className="file-header">
+                  <FileText size={20} className="file-icon" />
+                  <div className="file-meta">
+                    <p className="file-name">{uploadedFile.name}</p>
+                    <p className="file-size">{formatFileSize(uploadedFile.size)}</p>
+                  </div>
+                </div>
+
+                {/* Image Preview */}
+                {uploadedFile.preview && uploadedFile.type.startsWith('image/') && (
+                  <div className="file-preview">
+                    <img src={uploadedFile.preview} alt="Lab report preview" />
+                  </div>
+                )}
+
+                {uploadedFile.url && (
+                  <a href={uploadedFile.url} target="_blank" rel="noreferrer" className="file-link">
+                    <Download size={16} /> View / Download File
+                  </a>
+                )}
+
+                {/* PDF or Other File Type */}
+                {!uploadedFile.preview && !uploadedFile.url && (
+                  <div className="file-preview-placeholder">
+                    <FileText size={48} />
+                    <p>{uploadedFile.type || 'File'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="detail-section">
+              <p className="detail-note">No file uploaded with this record.</p>
+            </div>
+          )}
+
+          <div className="detail-modal-footer">
+            <button className="btn-secondary" onClick={onClose}>Close</button>
           </div>
         </div>
       </div>
@@ -224,61 +181,48 @@ function RecordDetailModal({ record, onClose }) {
   );
 }
 
-// Timeline Record Component
-function TimelineRecord({ record, onCardClick }) {
-  const predictionLabel = record.prediction === '0' ? 'Negative' :
-                          record.prediction === '1' ? 'Hypothyroid' :
-                          record.prediction === '2' ? 'Hyperthyroid' :
-                          (record.prediction || 'Unknown');
-  
-  const isAbnormal = predictionLabel !== 'Negative' && predictionLabel !== 'Unknown';
+// Record Card Component
+function RecordCard({ record, onCardClick }) {
+  const overallStatus = [record.statuses?.tsh, record.statuses?.freeT3, record.statuses?.freeT4].some(
+    (status) => status && status !== 'Normal'
+  )
+    ? 'abnormal'
+    : 'normal';
 
   return (
-    <div className="timeline-item" onClick={() => onCardClick(record)}>
-      <div className="timeline-node">
-        <div className={`node-dot ${isAbnormal ? 'dot-abnormal' : 'dot-normal'}`}></div>
-        <div className="node-line"></div>
+    <div className={`record-card status-border-${overallStatus}`} onClick={() => onCardClick(record)}>
+      <div className="card-header">
+        <div className="card-date">
+          <Calendar size={16} />
+          <span>{formatDate(record.date)}</span>
+        </div>
+        <div className={`card-status-badge status-${overallStatus}`}>
+          <Activity size={14} />
+          <span>{overallStatus === 'abnormal' ? 'Abnormal' : 'Normal'}</span>
+        </div>
       </div>
-      
-      <div className={`timeline-card glassmorphism hover-glow-${isAbnormal ? 'abnormal' : 'normal'}`}>
-        <div className="t-card-header">
-          <span className="t-card-date">
-            <Calendar size={14}/> {formatDate(record.date)}
-            {record.reportFileUrl && <FileText size={14} className="file-linked-icon" title="Original file attached" />}
-          </span>
-          <span className={`t-card-badge badge-${predictionLabel.toLowerCase()}`}>
-            {predictionLabel}
+      <div className="card-body">
+        <div className="value-item">
+          <span className="value-label">TSH</span>
+          <span className={`value-data status-text-${record.statuses?.tsh?.toLowerCase()}`}>
+            {formatValue(record.tsh)}
           </span>
         </div>
-        
-        <div className="t-card-metrics">
-          <div className="t-metric">
-            <em>TSH</em> <strong>{formatValue(record.tsh)}</strong>
-          </div>
-          <div className="t-metric">
-            <em>T3</em> <strong>{formatValue(record.freeT3)}</strong>
-          </div>
-          <div className="t-metric">
-            <em>T4</em> <strong>{formatValue(record.freeT4)}</strong>
-          </div>
+        <div className="value-item">
+          <span className="value-label">Free T3</span>
+          <span className={`value-data status-text-${record.statuses?.freeT3?.toLowerCase()}`}>
+            {formatValue(record.freeT3)}
+          </span>
         </div>
-
-        <div className="t-card-footer">
-          {record.reportFileUrl && (
-            <button 
-              className="t-card-file-btn" 
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(record.reportFileUrl, '_blank');
-              }}
-            >
-              <FileText size={14} /> View Source
-            </button>
-          )}
-          <div className="t-card-view-details">
-            <span>Details</span>
-            <ChevronRight size={16} />
-          </div>
+        <div className="value-item">
+          <span className="value-label">Free T4</span>
+          <span className={`value-data status-text-${record.statuses?.freeT4?.toLowerCase()}`}>
+            {formatValue(record.freeT4)}
+          </span>
+        </div>
+        <div className="result-row">
+          <span className="result-pill">{record.prediction || 'Result Pending'}</span>
+          {record.uploadedFile && <span className="file-pill">File Uploaded</span>}
         </div>
       </div>
     </div>
@@ -298,69 +242,70 @@ function PatientHistory({ records, user }) {
         if (!searchTerm) return true;
         const searchLower = searchTerm.toLowerCase();
         const date = formatDate(r.date).toLowerCase();
-        const pred = (r.prediction || '').toString().toLowerCase();
-        return date.includes(searchLower) || pred.includes(searchLower);
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const status = (r.statuses?.tsh || '').toLowerCase();
+        return date.includes(searchLower) || status.includes(searchLower);
+      });
   }, [records, searchTerm, filter]);
 
+  const handleClearSearch = () => setSearchTerm('');
+  const handleRecordClick = (record) => setSelectedRecord(record);
+  const handleCloseModal = () => setSelectedRecord(null);
+
   return (
-    <div className="ph-dashboard">
-      
-      {/* Dynamic Header */}
-      <div className="ph-header glassmorphism">
-        <div className="ph-title-area">
-          <Activity size={28} className="ph-icon" />
-          <div>
-            <h1>Clinical History</h1>
-            <p>Chronological patient records for {user?.fullName || 'the user'}</p>
-          </div>
+    <div className="patient-history-container">
+      <div className="controls-container">
+        <div className="search-bar">
+          <Search className="search-icon" size={20} />
+          <input
+            type="text"
+            placeholder="Search by date or status..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button className="clear-search-btn" onClick={handleClearSearch}>
+              <X size={18} />
+            </button>
+          )}
         </div>
-        
-        <div className="ph-filters">
-          <div className="search-pill">
-            <Search size={16} />
-            <input 
-              type="text" 
-              placeholder="Search date..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            {searchTerm && <X size={14} className="clear-icon" onClick={() => setSearchTerm('')} />}
-          </div>
-          
-          <div className="filter-pill">
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-              {FILTER_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
+        <div className="filter-wrapper">
+          <label htmlFor="filter-select" className="filter-label">Filter</label>
+          <select
+            id="filter-select"
+            className="filter-select"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            {FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Timeline View */}
-      <div className="ph-timeline-container">
+      <main className="records-grid-container">
         {filteredRecords.length > 0 ? (
-          <div className="timeline-wrapper">
+          <div className="records-grid">
             {filteredRecords.map((record) => (
-              <TimelineRecord key={record.id} record={record} onCardClick={setSelectedRecord} />
+              <RecordCard key={record.id} record={record} onCardClick={handleRecordClick} />
             ))}
           </div>
         ) : (
-          <div className="empty-state glassmorphism">
-            <div className="empty-pulse"></div>
-            <Activity size={48} />
-            <h3>No Records Found</h3>
-            <p>Patient outcome data will populate here after screening.</p>
+          <div className="no-records-found">
+            <div className="no-records-icon-wrapper">
+              <FileText size={48} />
+            </div>
+            <h3 className="no-records-title">No Thyroid Records Found</h3>
+            <p className="no-records-subtitle">
+              Records for {user?.fullName ?? 'this user'} will appear here after a diagnosis.
+            </p>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Modal */}
-      {selectedRecord && (
-        <RecordDetailModal record={selectedRecord} onClose={() => setSelectedRecord(null)} />
-      )}
+      {selectedRecord && <RecordDetailModal record={selectedRecord} onClose={handleCloseModal} />}
     </div>
   );
 }
