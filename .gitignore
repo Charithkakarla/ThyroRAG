@@ -1,2 +1,14 @@
 .env
 backend/.env
+
+# Python environments
+.venv/
+venv/
+backend/.venv/
+
+# Python cache and compiled artifacts
+__pycache__/
+*.py[cod]
+
+# Generated RAG upload artifacts
+backend/RAG/uploaded_files/

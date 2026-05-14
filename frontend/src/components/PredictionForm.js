@@ -8,7 +8,8 @@ import {
   PieChart,
   Info,
   Upload,
-  FileDown
+  FileDown,
+  Pill
 } from 'lucide-react';
 import { predictThyroidDisease, parseUploadedFile } from '../services/api';
 import { generatePDF } from '../utils/generatePDF';
@@ -82,6 +83,8 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
   const [uploading, setUploading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pendingUploadedFile, setPendingUploadedFile] = useState(null);
+  const [medications, setMedications] = useState(null);
+  const [medLoading, setMedLoading] = useState(false);
 
   const handleDownloadPDF = async () => {
     setPdfLoading(true);
@@ -190,6 +193,37 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
       // Call API
       const response = await predictThyroidDisease(processedData);
       setResult(response);
+      setMedications(null);
+
+      // Fetch medication recommendations in the background
+      if (response?.result_label) {
+        setMedLoading(true);
+        try {
+          const medResp = await fetch('http://localhost:8000/medications/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              diagnosis: response.result_label,
+              tsh: processedData.TSH,
+              t3: processedData.T3,
+              tt4: processedData.TT4,
+              age: processedData.age,
+              sex: processedData.sex,
+              pregnant: processedData.pregnant,
+              on_thyroxine: processedData.on_thyroxine,
+              on_antithyroid_medication: processedData.on_antithyroid_medication,
+            }),
+          });
+          if (medResp.ok) {
+            const medData = await medResp.json();
+            setMedications(medData);
+          }
+        } catch (medErr) {
+          console.warn('[Medications] Failed to load recommendations:', medErr);
+        } finally {
+          setMedLoading(false);
+        }
+      }
 
       if (onHistoryRecordCreated) {
         showSuccess('✅ Prediction saved! Your Patient History & Analytics have been updated.');
@@ -263,6 +297,7 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
     setResult(null);
     setError(null);
     setPendingUploadedFile(null);
+    setMedications(null);
   };
 
   React.useEffect(() => {
@@ -737,6 +772,55 @@ function PredictionForm({ defaultPatientName = '', onHistoryRecordCreated }) {
           <p className="result-disclaimer">
             <Info size={18} /> This is an AI prediction for educational purposes. Please consult a healthcare professional for proper diagnosis.
           </p>
+
+          {/* ── Medication Recommendations ── */}
+          {medLoading && (
+            <div className="medications-card loading">
+              <Loader2 size={18} className="animate-spin" />
+              <span>Generating personalized medication recommendations...</span>
+            </div>
+          )}
+          {medications && !medLoading && (
+            <div className="medications-card">
+              <h4><Pill size={18} /> AI Medication Recommendations</h4>
+              <p className="med-subtitle">Based on your diagnosis: <strong>{result.result_label}</strong></p>
+
+              {medications.medications?.length > 0 && (
+                <div className="med-section">
+                  <h5>Recommended Medications</h5>
+                  <ul className="med-list">
+                    {medications.medications.map((m, i) => (
+                      <li key={i}>
+                        <strong>{m.name}</strong>
+                        {m.dosage && <span className="med-dosage"> — {m.dosage}</span>}
+                        {m.note && <p className="med-note">{m.note}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {medications.lifestyle?.length > 0 && (
+                <div className="med-section">
+                  <h5>Lifestyle Recommendations</h5>
+                  <ul className="med-list lifestyle">
+                    {medications.lifestyle.map((l, i) => <li key={i}>{l}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {medications.followup && (
+                <div className="med-followup">
+                  <strong>Follow-up:</strong> {medications.followup}
+                </div>
+              )}
+
+              <p className="med-disclaimer">
+                ⚠️ These are AI-generated suggestions only. Always consult a licensed physician before starting or changing any medication.
+              </p>
+            </div>
+          )}
+
           <div className="result-actions">
             <button
               className="btn-download-pdf"

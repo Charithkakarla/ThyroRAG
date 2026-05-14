@@ -84,7 +84,7 @@ function App() {
       const merged = hydratePatientRecords(mergeHistoryRecords(records, localHistoryRecords));
       setPatientRecords(merged);
     });
-  }, [isSignedIn, user, updateCounter, localHistoryRecords]);
+  }, [isSignedIn, user, updateCounter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
     await signOut();

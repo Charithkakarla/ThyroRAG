@@ -540,3 +540,119 @@
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Medications Recommendations Card ─────────────────────────── */
+.medications-card {
+  margin-top: 1.5rem;
+  padding: 1.5rem 1.75rem;
+  background: linear-gradient(135deg, #0f1e18, #13271f);
+  border: 1.5px solid #2d7a4f;
+  border-radius: 12px;
+  animation: fadeInDown 0.35s ease;
+  color: #d4edd9;
+}
+
+.medications-card.loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #6fcf97;
+  padding: 1rem 1.5rem;
+  background: #0d1f16;
+  border: 1.5px dashed #2d7a4f;
+  border-radius: 10px;
+}
+
+.medications-card h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #6fcf97;
+  margin: 0 0 0.4rem 0;
+}
+
+.med-subtitle {
+  font-size: 0.85rem;
+  color: #a0c8b0;
+  margin: 0 0 1.2rem 0;
+}
+
+.med-subtitle strong {
+  color: #6fcf97;
+}
+
+.med-section {
+  margin-bottom: 1.2rem;
+}
+
+.med-section h5 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #4aab73;
+  margin: 0 0 0.65rem 0;
+}
+
+.med-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.med-list li {
+  padding: 0.65rem 0.9rem;
+  background: rgba(45, 122, 79, 0.12);
+  border-left: 3px solid #2d7a4f;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.9rem;
+  color: #d4edd9;
+}
+
+.med-list.lifestyle li {
+  border-left-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.med-dosage {
+  font-size: 0.82rem;
+  color: #6fcf97;
+  font-weight: 600;
+}
+
+.med-note {
+  font-size: 0.8rem;
+  color: #90b8a0;
+  margin: 0.3rem 0 0 0;
+  font-style: italic;
+}
+
+.med-followup {
+  margin-top: 0.75rem;
+  padding: 0.65rem 1rem;
+  background: rgba(251, 191, 36, 0.08);
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.88rem;
+  color: #fcd34d;
+}
+
+.med-followup strong {
+  color: #f59e0b;
+  margin-right: 0.35rem;
+}
+
+.med-disclaimer {
+  margin-top: 1.1rem;
+  font-size: 0.78rem;
+  color: #6b8e7a;
+  border-top: 1px solid #1e3d2a;
+  padding-top: 0.75rem;
+  line-height: 1.55;
+}

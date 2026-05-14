@@ -507,6 +507,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
     ],
     allow_credentials=False,
     allow_methods=["*"],
@@ -1125,6 +1129,175 @@ async def update_profile(updates: dict, current_user=Depends(get_current_user)):
         return resp.data[0] if resp.data else {}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
+
+
+# -- Medication Recommendations Endpoint ----------------------------------
+
+class MedRequest(BaseModel):
+    diagnosis: str
+    tsh: Optional[float] = None
+    t3: Optional[float] = None
+    tt4: Optional[float] = None
+    age: Optional[float] = None
+    sex: Optional[str] = "F"
+    pregnant: Optional[str] = "No"
+    on_thyroxine: Optional[str] = "No"
+    on_antithyroid_medication: Optional[str] = "No"
+
+@app.post("/medications/recommend")
+async def recommend_medications(req: MedRequest):
+    """
+    Generate clinically accurate, personalized medication recommendations
+    using Groq LLM with strict evidence-based clinical rules.
+    """
+    diag = req.diagnosis.strip()
+    is_pregnant = str(req.pregnant).strip().lower() in ("yes", "t", "true", "1")
+    context_parts = [
+        f"Diagnosis: {diag}",
+        f"Patient age: {req.age or 'unknown'} years",
+        f"Sex: {'Female' if req.sex == 'F' else 'Male'}",
+        f"Pregnant: {'Yes' if is_pregnant else 'No'}",
+        f"TSH: {req.tsh if req.tsh is not None else 'not provided'} mIU/L (Normal: 0.4-4.0)",
+        f"T3: {req.t3 if req.t3 is not None else 'not provided'} nmol/L",
+        f"TT4: {req.tt4 if req.tt4 is not None else 'not provided'} nmol/L",
+        f"Currently on Levothyroxine/Thyroxine: {req.on_thyroxine}",
+        f"Currently on antithyroid medication: {req.on_antithyroid_medication}",
+    ]
+    patient_context = "\n".join(context_parts)
+
+    if _GROQ_API_KEY:
+        system_prompt = (
+            "You are a board-certified endocrinologist providing evidence-based thyroid medication guidance. "
+            "CRITICAL CLINICAL RULES YOU MUST FOLLOW:\n"
+            "1. HYPOTHYROIDISM ONLY: Levothyroxine (synthetic T4) is the first-line treatment. "
+            "   NEVER recommend Levothyroxine for hyperthyroidism — it will worsen the condition.\n"
+            "2. HYPERTHYROIDISM ONLY: Use antithyroid drugs (Methimazole preferred; Propylthiouracil for T1 pregnancy or allergy). "
+            "   NEVER prescribe thyroid hormone replacement for hyperthyroidism.\n"
+            "3. PREGNANCY: If hypothyroid and pregnant, Levothyroxine is safe but dose requirements increase by ~30-50%. "
+            "   If hyperthyroid and pregnant: PTU in first trimester, switch to Methimazole in 2nd/3rd trimester.\n"
+            "4. NEGATIVE/NORMAL: No medication. Recommend monitoring and healthy lifestyle only.\n"
+            "5. Levothyroxine must be taken on an empty stomach 30-60 min before breakfast. "
+            "   Avoid calcium, iron, antacids within 4 hours.\n"
+            "6. Always include monitoring/follow-up TSH timeline.\n"
+            "Return ONLY raw JSON — no markdown, no explanation outside JSON. "
+            'Format exactly: {"medications": [{"name": "...", "dosage": "...", "note": "..."}], "lifestyle": ["...", "..."], "followup": "..."}'
+        )
+        user_prompt = (
+            f"Patient Details:\n{patient_context}\n\n"
+            "Based on the diagnosis above and strict clinical guidelines, provide:\n"
+            "- First-line and (if applicable) second-line medications with starting dosage ranges and critical notes\n"
+            "- 3 specific lifestyle recommendations for this condition\n"
+            "- A follow-up monitoring schedule with TSH testing timeline\n"
+            "Do NOT recommend Levothyroxine for hyperthyroidism. "
+            "Do NOT recommend antithyroid drugs for hypothyroidism. "
+            "Return JSON only."
+        )
+        try:
+            resp = _requests.post(
+                f"{_GROQ_API_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {_GROQ_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": _GROQ_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user",   "content": user_prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 900,
+                },
+                timeout=25
+            )
+            if resp.status_code == 200:
+                raw = resp.json()["choices"][0]["message"]["content"]
+                cleaned = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
+                return json.loads(cleaned)
+        except Exception as e:
+            print(f"[WARNING] Groq medication generation failed: {e}")
+
+    # ── Clinically accurate rule-based fallback ──────────────────────────
+    diag_lower = diag.lower()
+
+    if "hypothyroid" in diag_lower:
+        meds = [
+            {
+                "name": "Levothyroxine (Synthetic T4) — First-line",
+                "dosage": "25-50 mcg/day (starting dose). Titrated every 6-8 weeks based on TSH. Typical maintenance: 50-200 mcg/day.",
+                "note": "Take on an EMPTY STOMACH 30-60 minutes before breakfast. Avoid calcium supplements, iron, antacids, and high-fibre foods within 4 hours — they reduce absorption significantly."
+            }
+        ]
+        if req.t3 is not None and float(req.t3) < 1.0:
+            meds.append({
+                "name": "Liothyronine (Synthetic T3) — Add-on if T3 remains low",
+                "dosage": "5-25 mcg/day in divided doses, used alongside Levothyroxine.",
+                "note": "Not first-line. Only considered if symptoms persist despite normal TSH on Levothyroxine. Monitor heart rate — excess T3 can cause palpitations."
+            })
+        if is_pregnant:
+            meds[0]["note"] += " Levothyroxine is SAFE during pregnancy. Dose requirements typically increase by 30-50% in pregnancy. Monitor TSH every 4 weeks during first half of pregnancy."
+        lifestyle = [
+            "Take Levothyroxine at the same time every morning — consistency is critical for stable TSH levels.",
+            "Limit raw cruciferous vegetables (broccoli, kale, cabbage) and excessive soy as these can interfere with thyroid function.",
+            "Regular aerobic exercise (30 min/day) helps manage weight, fatigue, and metabolic symptoms.",
+        ]
+        followup = (
+            "Repeat TSH test 6-8 weeks after starting or adjusting Levothyroxine. "
+            "Once stable, recheck TSH every 6-12 months. "
+            + ("During pregnancy: TSH every 4 weeks for first 20 weeks, then once per trimester." if is_pregnant else "")
+        )
+
+    elif "hyperthyroid" in diag_lower:
+        if is_pregnant:
+            meds = [
+                {
+                    "name": "Propylthiouracil (PTU) — First trimester of pregnancy",
+                    "dosage": "50-150 mg every 8 hours (titrated to lowest effective dose).",
+                    "note": "Preferred in FIRST trimester of pregnancy due to lower teratogenic risk. Switch to Methimazole in 2nd/3rd trimester. Monitor liver function — rare but serious hepatotoxicity risk."
+                },
+                {
+                    "name": "Methimazole (Carbimazole) — 2nd and 3rd trimester",
+                    "dosage": "5-20 mg/day (single or divided dose).",
+                    "note": "Standard antithyroid drug. Switch from PTU after first trimester in pregnancy. Monitor complete blood count — stop immediately if fever or sore throat (risk of agranulocytosis)."
+                }
+            ]
+        else:
+            meds = [
+                {
+                    "name": "Methimazole (Tapazole/Carbimazole) — First-line antithyroid",
+                    "dosage": "10-30 mg/day (once daily for mild-moderate). Up to 40 mg/day for severe disease.",
+                    "note": "IMPORTANT: Stop and seek immediate care if fever or sore throat develops (risk of agranulocytosis). Monitor liver enzymes. Do NOT use Levothyroxine — it would worsen hyperthyroidism."
+                },
+                {
+                    "name": "Propranolol (Beta-blocker) — Symptom relief only",
+                    "dosage": "10-40 mg every 6-8 hours as needed.",
+                    "note": "Used to control heart palpitations, tremors, and anxiety while antithyroid drugs take effect (2-6 weeks). NOT a thyroid-specific drug. Avoid if asthmatic."
+                }
+            ]
+        lifestyle = [
+            "Strictly AVOID iodine-rich foods: seaweed, kelp supplements, and excessive iodized salt — iodine stimulates thyroid hormone production.",
+            "Avoid caffeine, energy drinks, and stimulants as they worsen palpitations and anxiety.",
+            "Practice daily stress-reduction techniques (deep breathing, meditation) — stress aggravates hyperthyroid symptoms.",
+        ]
+        followup = (
+            "Thyroid function tests (TSH, Free T3, Free T4) every 4-6 weeks initially. "
+            "Discuss with endocrinologist about long-term options: radioactive iodine (RAI) therapy or surgery (thyroidectomy) "
+            "if antithyroid medications fail or relapse occurs after 12-18 months of treatment."
+        )
+
+    else:
+        # Negative / Normal thyroid
+        meds = []
+        lifestyle = [
+            "Maintain a balanced diet with adequate iodine (iodized salt, dairy, seafood in moderation) and selenium (Brazil nuts, eggs).",
+            "Annual TSH blood test is recommended, especially if you have a family history of thyroid disease.",
+            "Report any new symptoms — unexplained fatigue, weight change, cold/heat intolerance, or palpitations — to your doctor promptly.",
+        ]
+        followup = (
+            "No medication required at this time. "
+            "Annual TSH screening recommended. "
+            "Consult an endocrinologist if symptoms develop or TSH changes significantly."
+        )
+
+    return {"medications": meds, "lifestyle": lifestyle, "followup": followup}
+
 
 if __name__ == "__main__":
     import uvicorn
